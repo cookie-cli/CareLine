@@ -1,0 +1,5 @@
+# careline/.gitignore
+.env
+__pycache__/
+*.pyc
+backend/firebase-key.json

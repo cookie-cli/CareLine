@@ -1,0 +1,376 @@
+<!-- static/record.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Prescription Recorder</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        
+        .record-section {
+            text-align: center;
+            padding: 40px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        #recordBtn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            background: #dc3545;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+        }
+        #recordBtn:hover { transform: scale(1.05); }
+        #recordBtn.recording {
+            background: #6c757d;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .status {
+            margin-top: 15px;
+            font-size: 16px;
+            color: #555;
+        }
+        
+        .timer {
+            font-size: 48px;
+            font-weight: bold;
+            color: #333;
+            margin: 20px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        
+        #audioPlayback {
+            width: 100%;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #d4edda;
+            border-radius: 8px;
+            display: none;
+        }
+        .result.error {
+            background: #f8d7da;
+        }
+        .result h3 {
+            margin-top: 0;
+            color: #155724;
+        }
+        .transcript {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-style: italic;
+        }
+        .medicine-list {
+            list-style: none;
+            padding: 0;
+        }
+        .medicine-list li {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ Prescription Voice Recorder</h1>
+        <p class="subtitle">Record a prescription verbally and automatically extract medicine details</p>
+        
+        <div class="form-group">
+            <label for="patientName">Patient Name (optional)</label>
+            <input type="text" id="patientName" placeholder="e.g., Amma, Patient Name">
+        </div>
+        
+        <div class="record-section">
+            <button id="recordBtn">🎤<br>Record</button>
+            <div class="timer" id="timer">00:00</div>
+            <div class="status" id="status">Click to start recording</div>
+        </div>
+        
+        <audio id="audioPlayback" controls></audio>
+        
+        <div style="text-align: center;">
+            <button id="uploadBtn" class="btn btn-primary" disabled>Process Recording</button>
+            <button id="resetBtn" class="btn btn-secondary" disabled>Reset</button>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Transcribing and extracting medical information...</p>
+        </div>
+        
+        <div class="result" id="result">
+            <h3>✅ Prescription Processed</h3>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let audioBlob;
+        let startTime;
+        let timerInterval;
+        
+        const recordBtn = document.getElementById('recordBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const timer = document.getElementById('timer');
+        const status = document.getElementById('status');
+        const audioPlayback = document.getElementById('audioPlayback');
+        const patientNameInput = document.getElementById('patientName');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+        const resultContent = document.getElementById('resultContent');
+        
+        // API endpoint - change this to your server
+        const API_URL = 'http://localhost:8000/api/v1/audio/record';
+        
+        recordBtn.addEventListener('click', toggleRecording);
+        uploadBtn.addEventListener('click', uploadRecording);
+        resetBtn.addEventListener('click', resetRecording);
+        
+        async function toggleRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+        
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+                
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = () => {
+                    audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audioPlayback.src = audioUrl;
+                    audioPlayback.style.display = 'block';
+                    uploadBtn.disabled = false;
+                    resetBtn.disabled = false;
+                    status.textContent = 'Recording complete. Click Process to analyze.';
+                    recordBtn.classList.remove('recording');
+                    recordBtn.innerHTML = '🎤<br>Record';
+                };
+                
+                mediaRecorder.start();
+                startTime = Date.now();
+                timerInterval = setInterval(updateTimer, 1000);
+                
+                recordBtn.classList.add('recording');
+                recordBtn.innerHTML = '⏹<br>Stop';
+                status.textContent = 'Recording... Speak clearly';
+                uploadBtn.disabled = true;
+                
+            } catch (err) {
+                alert('Error accessing microphone: ' + err.message);
+                console.error('Error:', err);
+            }
+        }
+        
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                clearInterval(timerInterval);
+            }
+        }
+        
+        function updateTimer() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            const seconds = (elapsed % 60).toString().padStart(2, '0');
+            timer.textContent = `${minutes}:${seconds}`;
+        }
+        
+        async function uploadRecording() {
+            if (!audioBlob) return;
+            
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            uploadBtn.disabled = true;
+            
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+            formData.append('patient_name', patientNameInput.value);
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                loading.style.display = 'none';
+                result.style.display = 'block';
+                
+                if (data.success) {
+                    displayResult(data);
+                } else {
+                    showError('Processing failed: ' + (data.detail || 'Unknown error'));
+                }
+                
+            } catch (err) {
+                loading.style.display = 'none';
+                showError('Network error: ' + err.message);
+            }
+        }
+        
+        function displayResult(data) {
+            const extracted = data.extracted;
+            let medicinesHtml = '';
+            
+            if (extracted.medicines && extracted.medicines.length > 0) {
+                medicinesHtml = '<h4>💊 Medicines:</h4><ul class="medicine-list">';
+                extracted.medicines.forEach((med, i) => {
+                    medicinesHtml += `
+                        <li>
+                            <strong>${i + 1}. ${med.name}</strong><br>
+                            ${med.dosage ? `Dosage: ${med.dosage}<br>` : ''}
+                            ${med.frequency ? `Frequency: ${med.frequency}<br>` : ''}
+                            ${med.duration ? `Duration: ${med.duration}<br>` : ''}
+                            ${med.instructions ? `Instructions: ${med.instructions}` : ''}
+                        </li>
+                    `;
+                });
+                medicinesHtml += '</ul>';
+            }
+            
+            resultContent.innerHTML = `
+                <div class="transcript">
+                    <strong>📝 Transcript:</strong><br>
+                    "${data.transcription.text}"
+                </div>
+                <p><strong>Patient:</strong> ${extracted.patient_name || 'Not specified'}</p>
+                ${extracted.symptoms && extracted.symptoms.length ? `<p><strong>Symptoms:</strong> ${extracted.symptoms.join(', ')}</p>` : ''}
+                ${medicinesHtml}
+                <p><strong>Confidence:</strong> ${extracted.confidence || 'medium'}</p>
+                ${data.document_id ? `<p><strong>Saved:</strong> ✅ (ID: ${data.document_id})</p>` : ''}
+            `;
+        }
+        
+        function showError(message) {
+            result.style.display = 'block';
+            result.classList.add('error');
+            resultContent.innerHTML = `<p style="color: #721c24;">${message}</p>`;
+        }
+        
+        function resetRecording() {
+            audioBlob = null;
+            audioChunks = [];
+            audioPlayback.src = '';
+            audioPlayback.style.display = 'none';
+            timer.textContent = '00:00';
+            status.textContent = 'Click to start recording';
+            uploadBtn.disabled = true;
+            resetBtn.disabled = true;
+            result.style.display = 'none';
+            result.classList.remove('error');
+            patientNameInput.value = '';
+        }
+    </script>
+</body>
+</html>
