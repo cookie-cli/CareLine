@@ -1,5 +1,7 @@
 # app/services/correction.py
 
+import re
+
 # Medicine name corrections for Indian medicines
 CORRECTIONS = {
     "thermal": "Telma",
@@ -27,7 +29,11 @@ def correct_medicine_names(text: str) -> str:
     """
     Fix common misheard medicine names
     """
-    corrected = text.lower()
+    if not text:
+        return ""
+
+    corrected = text
     for wrong, right in CORRECTIONS.items():
-        corrected = corrected.replace(wrong.lower(), right)
+        pattern = re.compile(rf"\b{re.escape(wrong)}\b", flags=re.IGNORECASE)
+        corrected = pattern.sub(right, corrected)
     return corrected

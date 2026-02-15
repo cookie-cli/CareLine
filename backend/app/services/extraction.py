@@ -34,24 +34,34 @@ def extract_medicines(text: str) -> dict:
     """
     Extract structured medicine data using Groq LLM
     """
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text}
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.1  # Low temperature for consistent output
-    )
-    
-    result = json.loads(response.choices[0].message.content)
-    
-    # Ensure all required fields exist
-    if "medicines" not in result:
-        result["medicines"] = []
-    if "patient_name" not in result:
-        result["patient_name"] = ""
-    if "notes" not in result:
-        result["notes"] = ""
-        
-    return result
+    if not text or not text.strip():
+        return {"medicines": [], "patient_name": "", "notes": "", "error": "Empty input text"}
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": text}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1  # Low temperature for consistent output
+        )
+
+        result = json.loads(response.choices[0].message.content)
+
+        # Ensure all required fields exist
+        if "medicines" not in result:
+            result["medicines"] = []
+        if "patient_name" not in result:
+            result["patient_name"] = ""
+        if "notes" not in result:
+            result["notes"] = ""
+        return result
+    except Exception as e:
+        return {
+            "medicines": [],
+            "patient_name": "",
+            "notes": "",
+            "error": str(e),
+        }

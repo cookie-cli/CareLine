@@ -1,10 +1,12 @@
 # app/routers/audio.py
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from fastapi import APIRouter, UploadFile, File, Form
 from app.database.firebase import save_prescription
-from app.services.transcription import transcribe_audio, extract_medical_from_transcript  # Use service
-import tempfile
-import os
+from app.services.prescription_flow import (
+    cleanup_temp_file,
+    persist_upload_to_temp,
+    process_audio_file_to_draft,
+)
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 
@@ -24,75 +26,60 @@ async def upload_audio(
     audio: UploadFile = File(...),
     language: str = Form(default="auto"),
     patient_name: str = Form(default=""),
-    save_to_firebase: bool = Form(default=True)
+    auto_save: bool = Form(default=False)
 ):
-    """Upload audio → Transcribe → Extract medical info → Save"""
-    
-    content_type = audio.content_type or "application/octet-stream"
-    
-    if content_type not in ALLOWED_AUDIO_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported format: {content_type}")
-    
-    ext = MIME_TO_EXT.get(content_type, ".wav")
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-        content = await audio.read()
-        tmp.write(content)
-        audio_path = tmp.name
-    
+    """Upload audio → Transcribe → Extract → Return editable draft (or save if auto_save=true)."""
+
+    audio_path, _ = await persist_upload_to_temp(
+        upload=audio,
+        allowed_types=ALLOWED_AUDIO_TYPES,
+        default_suffix=".wav",
+        mime_to_ext=MIME_TO_EXT,
+    )
+
     try:
-        # Step 1: Transcribe using service
-        transcription = transcribe_audio(audio_path, language)
-        
-        if not transcription["success"]:
-            raise HTTPException(status_code=500, detail=transcription.get("error", "Transcription failed"))
-        
-        transcript_text = transcription["text"]
-        
-        # Step 2: Extract medical info using service
-        extracted = extract_medical_from_transcript(transcript_text)
-        
-        if patient_name:
-            extracted["patient_name"] = patient_name
-        
-        # Step 3: Save to Firebase
+        pipeline = process_audio_file_to_draft(
+            audio_path=audio_path,
+            language=language,
+            patient_name=patient_name,
+            audio_filename=audio.filename or "",
+        )
+
+        draft_data = pipeline["draft_data"]
+        transcription = pipeline["transcription"]
+        transcript_text = pipeline["transcript_text"]
+
         doc_id = None
-        if save_to_firebase:
-            storage_data = {
-                "type": "audio_transcription",
-                "patient_name": extracted.get("patient_name", ""),
-                "patient_age": extracted.get("patient_age", ""),
-                "symptoms": extracted.get("symptoms", []),
-                "medicines": extracted.get("medicines", []),
-                "raw_transcript": transcript_text,
-                "extracted_data": extracted,
-                "audio_filename": audio.filename,
-                "language": transcription.get("language", "unknown"),
-                "confidence": extracted.get("confidence", "medium")
-            }
-            doc_id = save_prescription(storage_data, audio.filename)
-        
+        if auto_save:
+            doc_id = save_prescription({**draft_data, "type": "audio_transcription"}, audio.filename)
+
         return {
             "success": True,
+            "mode": "saved" if auto_save else "draft",
             "document_id": doc_id,
             "transcription": {
                 "text": transcript_text,
                 "language": transcription.get("language")
             },
-            "extracted": extracted
+            "draft_data": draft_data
         }
-        
+
     finally:
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
+        cleanup_temp_file(audio_path)
 
 @router.post("/record")
 async def process_recorded_audio(
     audio: UploadFile = File(...),
-    patient_name: str = Form(default="")
+    patient_name: str = Form(default=""),
+    auto_save: bool = Form(default=False),
 ):
     """Browser recording endpoint"""
-    return await upload_audio(audio=audio, language="auto", patient_name=patient_name)
+    return await upload_audio(
+        audio=audio,
+        language="auto",
+        patient_name=patient_name,
+        auto_save=auto_save,
+    )
 
 @router.get("/status")
 async def audio_status():

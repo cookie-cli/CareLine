@@ -1,10 +1,11 @@
 # app/routers/scanner.py
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from app.database.firebase import save_prescription
+from app.services.prescription_builder import build_scanner_draft
+from app.services.prescription_flow import cleanup_temp_file, persist_upload_to_temp
 from groq import Groq
 from app.config import settings
-import tempfile
 import os
 import base64
 import traceback
@@ -175,22 +176,20 @@ Return structured JSON with all medicines and correct interpretation of abbrevia
         raise
 
 @router.post("/image")
-async def scan_prescription(image: UploadFile = File(..., description="Prescription image")):
+async def scan_prescription(
+    image: UploadFile = File(..., description="Prescription image"),
+    auto_save: bool = Form(default=False),
+):
     """Scan prescription image and extract structured data"""
-    
+
     allowed = ["image/jpeg", "image/png", "image/jpg", "image/webp"]
-    if image.content_type not in allowed:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Invalid file type: {image.content_type}. Allowed: {allowed}"
-        )
-    
-    suffix = os.path.splitext(image.filename)[1] or ".jpg"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        content = await image.read()
-        tmp.write(content)
-        temp_path = tmp.name
-    
+    temp_path, content = await persist_upload_to_temp(
+        upload=image,
+        allowed_types=allowed,
+        default_suffix=".jpg",
+        mime_to_ext=None,
+    )
+
     try:
         print(f"Processing: {image.filename} ({len(content)} bytes)")
         
@@ -201,30 +200,17 @@ async def scan_prescription(image: UploadFile = File(..., description="Prescript
         for i, med in enumerate(extracted_data['medicines']):
             print(f"  {i+1}. {med['name']} - {med['dosage']}")
         
-        # Flatten for Firebase storage
-        storage_data = {
-            "patient_name": extracted_data["patient"]["name"],
-            "patient_age": extracted_data["patient"]["age"],
-            "patient_gender": extracted_data["patient"]["gender"],
-            "patient_location": extracted_data["patient"]["location"],
-            "diagnosis": extracted_data["diagnosis"],
-            "medicines": extracted_data["medicines"],
-            "dosage_instructions": extracted_data["dosage_instructions"],
-            "general_instructions": extracted_data["general_instructions"],
-            "follow_up": extracted_data["follow_up"],
-            "doctor_name": extracted_data["doctor_name"],
-            "clinic_name": extracted_data["clinic_name"],
-            "prescription_date": extracted_data["date"],
-            "raw_text": extracted_data["raw_full_text"],
-            "image_filename": image.filename
-        }
-        
-        doc_id = save_prescription(storage_data, image.filename)
+        draft_data = build_scanner_draft(extracted_data=extracted_data, image_filename=image.filename or "")
+
+        doc_id = None
+        if auto_save:
+            doc_id = save_prescription(draft_data, image.filename)
         
         return {
             "success": True,
+            "mode": "saved" if auto_save else "draft",
             "document_id": doc_id,
-            "extracted_data": extracted_data,
+            "draft_data": draft_data,
             "summary": {
                 "patient": extracted_data["patient"]["name"],
                 "medicine_count": len(extracted_data["medicines"]),
@@ -237,10 +223,9 @@ async def scan_prescription(image: UploadFile = File(..., description="Prescript
         print(f"Error: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
-        
+
     finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        cleanup_temp_file(temp_path)
 
 @router.post("/quick-test")
 async def quick_scan_test():
@@ -295,6 +280,6 @@ async def scanner_status():
     return {
         "status": "active",
         "method": "groq-vision-api",
-        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "model": "meta -llama/llama-4-scout-17b-16e-instruct",
         "features": ["medical-abbreviations", "ayurvedic-support", "dosage-interpretation"]
     }

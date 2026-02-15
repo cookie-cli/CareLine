@@ -47,6 +47,27 @@ try:
 except Exception as e:
     print(f"❌ Error loading nudges router: {e}")
 
+try:
+    from app.routers import status
+    app.include_router(status.router, prefix="/api/v1")
+    print("✅ Status router loaded")
+except Exception as e:
+    print(f"❌ Error loading status router: {e}")
+
+try:
+    from app.routers import prescriptions
+    app.include_router(prescriptions.router, prefix="/api/v1")
+    print("✅ Prescriptions router loaded")
+except Exception as e:
+    print(f"❌ Error loading prescriptions router: {e}")
+
+try:
+    from app.routers import linking
+    app.include_router(linking.router, prefix="/api/v1")
+    print("✅ Linking router loaded")
+except Exception as e:
+    print(f"❌ Error loading linking router: {e}")
+
 @app.get("/")
 async def root():
     return {
@@ -55,6 +76,9 @@ async def root():
             "scanner": "/api/v1/scanner",
             "audio": "/api/v1/audio",
             "nudges": "/api/v1/nudges",
+            "status": "/api/v1/status",
+            "prescriptions": "/api/v1/prescriptions",
+            "linking": "/api/v1/linking",
             "recorder": "/static/record.html"
         }
     }
