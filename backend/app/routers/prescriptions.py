@@ -1,8 +1,20 @@
 # app/routers/prescriptions.py
 
-from fastapi import APIRouter, UploadFile, File, Query, Body, Form, HTTPException
-from app.database.firebase import save_prescription, get_prescriptions, get_prescription_by_id
+import logging
 from typing import Any, Dict
+
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
+
+from app.database.firebase import save_prescription
+from app.repositories import prescription_repo
+from app.security import (
+    AuthUser,
+    can_access_prescription,
+    can_access_user,
+    ensure_caretaker_access,
+    get_current_user,
+    rate_limit,
+)
 from app.services.prescription_flow import (
     build_final_prescription_data,
     cleanup_temp_file,
@@ -13,7 +25,13 @@ from app.services.prescription_flow import (
 from app.services.nudges_engine import ensure_daily_nudges_for_prescription, today_str
 from app.services.family_linking import get_users_for_caretaker
 
-router = APIRouter(prefix="/prescriptions", tags=["prescriptions"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/prescriptions",
+    tags=["prescriptions"],
+    dependencies=[Depends(get_current_user)],
+)
 
 ALLOWED_AUDIO_TYPES = [
     "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav",
@@ -33,6 +51,8 @@ async def process_audio(
     language: str = Form(default="auto"),
     patient_name: str = Form(default=""),
     auto_save: bool = Form(default=False),
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("prescriptions-process-audio", limit=10)),
 ):
     """
     Upload audio and return draft data for frontend editing.
@@ -58,6 +78,9 @@ async def process_audio(
 
         doc_id = None
         if auto_save:
+            draft_data.setdefault("user_id", current_user.user_id)
+            if current_user.role == "caretaker":
+                draft_data.setdefault("caretaker_id", current_user.user_id)
             doc_id = save_prescription(draft_data, audio.filename)
 
         return {
@@ -81,6 +104,8 @@ async def finalize_prescription(
     edits: Dict[str, Any] | None = Body(default=None, description="Only changed fields from frontend"),
     file_name: str = Body(default="", description="Original file name if any"),
     create_nudges: bool = Body(default=True, description="Create daily reminder nudges if caretaker_id exists"),
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("prescriptions-finalize", limit=20)),
 ):
     """
     Save final user-reviewed prescription data.
@@ -88,6 +113,18 @@ async def finalize_prescription(
     """
     try:
         final_data = build_final_prescription_data(source, draft_data, edits)
+
+        # Enforce ownership by auth role.
+        if current_user.role == "user":
+            final_data["user_id"] = current_user.user_id
+            caretaker_id = final_data.get("caretaker_id")
+            if caretaker_id:
+                ensure_caretaker_access(current_user, caretaker_id)
+        elif current_user.role == "caretaker":
+            final_data.setdefault("caretaker_id", current_user.user_id)
+            ensure_caretaker_access(current_user, final_data["caretaker_id"])
+            if final_data.get("user_id") and not can_access_user(current_user, final_data["user_id"]):
+                raise HTTPException(status_code=403, detail="Forbidden")
 
         # Auto-attach user if caretaker is linked and user_id is missing.
         if final_data.get("caretaker_id") and not final_data.get("user_id"):
@@ -115,14 +152,17 @@ async def finalize_prescription(
             "final_data": final_data,
             "nudge_sync": nudge_sync,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to finalize prescription")
+        raise HTTPException(status_code=500, detail="Failed to finalize prescription")
 
 @router.post("/process-text")
 async def process_text(
     text: str = Query(..., description="Prescription text to process"),
     patient_name: str = Query("Amma", description="Patient name"),
     auto_save: bool = Query(False, description="Directly save without frontend review"),
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("prescriptions-process-text", limit=20)),
 ):
     """
     Process raw text and return draft for frontend review.
@@ -133,6 +173,9 @@ async def process_text(
 
         doc_id = None
         if auto_save:
+            draft_data.setdefault("user_id", current_user.user_id)
+            if current_user.role == "caretaker":
+                draft_data.setdefault("caretaker_id", current_user.user_id)
             doc_id = save_prescription(draft_data)
 
         return {
@@ -142,32 +185,47 @@ async def process_text(
             "corrected": pipeline["corrected_text"],
             "draft_data": draft_data,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to process text prescription")
+        raise HTTPException(status_code=500, detail="Failed to process text")
 
 @router.get("/")
-async def list_prescriptions(patient_name: str = Query(None, description="Filter by patient name")):
+async def list_prescriptions(
+    patient_name: str = Query(None, description="Filter by patient name"),
+    current_user: AuthUser = Depends(get_current_user),
+):
     """
     List all prescriptions, optionally filter by patient name
     """
     try:
-        results = get_prescriptions(patient_name)
+        if current_user.role == "admin":
+            results = prescription_repo.list_for_admin(patient_name)
+        elif current_user.role == "caretaker":
+            results = prescription_repo.list_for_caretaker(current_user.user_id, patient_name)
+        else:
+            results = prescription_repo.list_for_user(current_user.user_id, patient_name)
         return {
             "success": True,
             "count": len(results),
             "prescriptions": results
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to list prescriptions")
+        raise HTTPException(status_code=500, detail="Failed to list prescriptions")
 
 @router.get("/{doc_id}")
-async def get_prescription(doc_id: str):
+async def get_prescription(
+    doc_id: str,
+    current_user: AuthUser = Depends(get_current_user),
+):
     """
     Get single prescription by ID
     """
-    result = get_prescription_by_id(doc_id)
+    result = prescription_repo.get_by_id(doc_id)
     if not result:
         raise HTTPException(status_code=404, detail="Prescription not found")
+    if not can_access_prescription(current_user, result):
+        raise HTTPException(status_code=403, detail="Forbidden")
     
     return {
         "success": True,

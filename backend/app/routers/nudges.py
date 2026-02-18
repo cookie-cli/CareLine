@@ -1,9 +1,20 @@
 from datetime import date, datetime, timedelta
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.database.firebase import db
+from app.repositories import nudge_repo, prescription_repo, user_repo
+from app.security import (
+    AuthUser,
+    can_access_nudge,
+    can_access_prescription,
+    can_access_user,
+    ensure_caretaker_access,
+    ensure_user_access,
+    get_current_user,
+    rate_limit,
+    require_admin,
+)
 from app.services.family_linking import get_caretaker_for_user
 from app.services.nudges_engine import (
     ensure_daily_medicine_nudges,
@@ -12,7 +23,11 @@ from app.services.nudges_engine import (
     get_today_bucket_status_for_user,
 )
 
-router = APIRouter(prefix="/nudges", tags=["nudges"])
+router = APIRouter(
+    prefix="/nudges",
+    tags=["nudges"],
+    dependencies=[Depends(get_current_user)],
+)
 
 TimeBucket = Literal["morning", "afternoon", "night"]
 
@@ -23,33 +38,24 @@ def today_str() -> str:
 
 def check_expiring_prescriptions():
     today = date.today()
+    today_iso = today_str()
     warning_date = (today + timedelta(days=7)).isoformat()
-
-    query = (
-        db.collection("prescriptions")
-        .where("expiry_date", "<=", warning_date)
-        .where("expiry_date", ">=", today_str())
-        .where("status", "==", "active")
-        .where("expiry_alert_sent", "!=", True)
-    )
-
-    docs = list(query.stream())
+    docs = prescription_repo.list_expiring_active(today_iso=today_iso, warning_iso=warning_date)
     alerts_sent = []
 
     for doc in docs:
-        data = doc.to_dict() or {}
-        caretaker_id = data.get("caretaker_id")
-        user_id = data.get("user_id") or data.get("added_by")
-        medicine_name = data.get("medicine_name", "Medicine")
-        expiry_date = data.get("expiry_date")
-        doctor_phone = data.get("doctor_phone")
+        caretaker_id = doc.get("caretaker_id")
+        user_id = doc.get("user_id") or doc.get("added_by")
+        medicine_name = doc.get("medicine_name", "Medicine")
+        expiry_date = doc.get("expiry_date")
+        doctor_phone = doc.get("doctor_phone")
 
         nudge_data = {
             "type": "expiry_alert",
             "target_role": "caretaker",
             "user_id": user_id,
             "caretaker_id": caretaker_id,
-            "prescription_id": doc.id,
+            "prescription_id": doc["id"],
             "medicine_name": medicine_name,
             "expiry_date": expiry_date,
             "message": f"Reminder: {medicine_name} expires on {expiry_date}. Consult doctor?",
@@ -60,11 +66,11 @@ def check_expiring_prescriptions():
             "doctor_phone": doctor_phone,
         }
 
-        nudge_ref = db.collection("nudges").add(nudge_data)
-        doc.reference.update({"expiry_alert_sent": True})
+        nudge_id = nudge_repo.create(nudge_data)
+        prescription_repo.mark_expiry_alert_sent(doc["id"])
         alerts_sent.append(
             {
-                "nudge_id": nudge_ref[1].id,
+                "nudge_id": nudge_id,
                 "medicine": medicine_name,
                 "caretaker_id": caretaker_id,
             }
@@ -74,7 +80,10 @@ def check_expiring_prescriptions():
 
 
 @router.post("/check-expiry-alerts")
-def trigger_expiry_check():
+def trigger_expiry_check(
+    _: AuthUser = Depends(require_admin),
+    __: None = Depends(rate_limit("nudges-check-expiry", limit=10)),
+):
     result = check_expiring_prescriptions()
     return {
         "success": True,
@@ -87,21 +96,21 @@ def trigger_expiry_check():
 def initiate_doctor_call(
     prescription_id: str,
     nudge_id: Optional[str] = None,
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("nudges-call-doctor", limit=20)),
 ):
-    pres_ref = db.collection("prescriptions").document(prescription_id)
-    pres = pres_ref.get()
-
-    if not pres.exists:
+    pres_data = prescription_repo.get_by_id(prescription_id)
+    if not pres_data:
         raise HTTPException(404, "Prescription not found")
 
-    pres_data = pres.to_dict() or {}
+    if not can_access_prescription(current_user, pres_data):
+        raise HTTPException(status_code=403, detail="Forbidden")
     doctor_phone = pres_data.get("doctor_phone")
     doctor_name = pres_data.get("doctor_name", "Doctor")
 
     if not doctor_phone:
         caretaker_id = pres_data.get("caretaker_id")
-        caretaker = db.collection("users").document(caretaker_id).get()
-        caretaker_data = caretaker.to_dict() or {}
+        caretaker_data = user_repo.get_by_id(caretaker_id) or {}
         doctor_phone = caretaker_data.get("default_doctor_phone")
         doctor_name = caretaker_data.get("default_doctor_name", "Doctor")
 
@@ -121,10 +130,11 @@ def initiate_doctor_call(
         "initiated_at": datetime.utcnow().isoformat(),
         "status": "initiated",
     }
-    db.collection("call_logs").add(call_log)
+    nudge_repo.add_call_log(call_log)
 
     if nudge_id:
-        db.collection("nudges").document(nudge_id).update(
+        nudge_repo.update(
+            nudge_id,
             {
                 "call_initiated": True,
                 "call_initiated_at": datetime.utcnow().isoformat(),
@@ -142,12 +152,15 @@ def initiate_doctor_call(
 
 
 @router.get("/doctor-info/{prescription_id}")
-def get_doctor_info(prescription_id: str):
-    pres = db.collection("prescriptions").document(prescription_id).get()
-    if not pres.exists:
+def get_doctor_info(
+    prescription_id: str,
+    current_user: AuthUser = Depends(get_current_user),
+):
+    data = prescription_repo.get_by_id(prescription_id)
+    if not data:
         raise HTTPException(404, "Prescription not found")
-
-    data = pres.to_dict() or {}
+    if not can_access_prescription(current_user, data):
+        raise HTTPException(status_code=403, detail="Forbidden")
     return {
         "doctor_name": data.get("doctor_name"),
         "doctor_phone": data.get("doctor_phone"),
@@ -162,7 +175,13 @@ def send_nudge(
     caretaker_id: str,
     time_bucket: TimeBucket,
     message: Optional[str] = None,
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("nudges-send", limit=30)),
 ):
+    ensure_caretaker_access(current_user, caretaker_id)
+    if not can_access_user(current_user, user_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     nudge_data = {
         "type": "medicine_reminder",
         "target_role": "user",
@@ -177,10 +196,10 @@ def send_nudge(
         "actions": ["taken", "skipped", "call_caretaker"],
     }
 
-    doc_ref = db.collection("nudges").add(nudge_data)
+    nudge_id = nudge_repo.create(nudge_data)
     return {
         "success": True,
-        "nudge_id": doc_ref[1].id,
+        "nudge_id": nudge_id,
         "nudge": nudge_data,
     }
 
@@ -196,25 +215,24 @@ def respond_to_nudge(
         "remind_user",
         "call_caretaker",
     ] = "taken",
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("nudges-respond", limit=60)),
 ):
-    doc_ref = db.collection("nudges").document(nudge_id)
-    doc = doc_ref.get()
-
-    if not doc.exists:
+    data = nudge_repo.get_by_id(nudge_id)
+    if not data:
         raise HTTPException(status_code=404, detail="Nudge not found")
-
-    data = doc.to_dict() or {}
+    if not can_access_nudge(current_user, data):
+        raise HTTPException(status_code=403, detail="Forbidden")
     update_data = {
         "status": "acknowledged",
         "response": response,
         "acknowledged_at": datetime.utcnow().isoformat(),
     }
-    doc_ref.update(update_data)
+    nudge_repo.update(nudge_id, update_data)
 
     if response == "call_user":
         user_id = data.get("user_id")
-        user = db.collection("users").document(user_id).get()
-        user_data = user.to_dict() or {}
+        user_data = user_repo.get_by_id(user_id) or {}
         return {
             "success": True,
             "nudge_id": nudge_id,
@@ -238,18 +256,17 @@ def respond_to_nudge(
             "created_at": datetime.utcnow().isoformat(),
             "actions": ["taken", "skipped", "call_caretaker"],
         }
-        ping_ref = db.collection("nudges").add(user_ping)
+        ping_nudge_id = nudge_repo.create(user_ping)
         return {
             "success": True,
             "nudge_id": nudge_id,
             "update": update_data,
-            "user_ping_nudge_id": ping_ref[1].id,
+            "user_ping_nudge_id": ping_nudge_id,
         }
 
     if response == "call_caretaker":
         caretaker_id = data.get("caretaker_id")
-        caretaker = db.collection("users").document(caretaker_id).get()
-        caretaker_data = caretaker.to_dict() or {}
+        caretaker_data = user_repo.get_by_id(caretaker_id) or {}
         phone = caretaker_data.get("phone")
         return {
             "success": True,
@@ -271,7 +288,9 @@ def respond_to_nudge(
 @router.get("/today-status")
 def get_today_status(
     caretaker_id: str = Query(..., description="Caretaker user id"),
+    current_user: AuthUser = Depends(get_current_user),
 ):
+    ensure_caretaker_access(current_user, caretaker_id)
     today = today_str()
     user_status = get_today_bucket_status(caretaker_id, today, target_role="user")
     caretaker_tasks = get_today_bucket_status(caretaker_id, today, target_role="caretaker")
@@ -286,7 +305,9 @@ def get_today_status(
 @router.get("/today-status-user")
 def get_today_status_user(
     user_id: str = Query(..., description="User id"),
+    current_user: AuthUser = Depends(get_current_user),
 ):
+    ensure_user_access(current_user, user_id)
     today = today_str()
     status = get_today_bucket_status_for_user(user_id, today)
     caretaker_id = get_caretaker_for_user(user_id)
@@ -303,7 +324,13 @@ def sync_daily_nudges(
     caretaker_id: str,
     user_id: str = "",
     for_date: str = Query(default_factory=today_str),
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("nudges-sync-daily", limit=30)),
 ):
+    ensure_caretaker_access(current_user, caretaker_id)
+    if user_id and not can_access_user(current_user, user_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     try:
         day = date.fromisoformat(for_date)
     except ValueError:
@@ -332,67 +359,61 @@ def sync_daily_nudges(
 def user_tick_reminder(
     nudge_id: str,
     action: Literal["taken", "skipped", "call_caretaker"] = "taken",
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("nudges-user-tick", limit=60)),
 ):
-    return respond_to_nudge(nudge_id=nudge_id, response=action)
+    return respond_to_nudge(nudge_id=nudge_id, response=action, current_user=current_user)
 
 
 @router.post("/caretaker-tick")
 def caretaker_tick_reminder(
     nudge_id: str,
     action: Literal["checked", "remind_user", "call_user"] = "checked",
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("nudges-caretaker-tick", limit=60)),
 ):
-    return respond_to_nudge(nudge_id=nudge_id, response=action)
+    return respond_to_nudge(nudge_id=nudge_id, response=action, current_user=current_user)
 
 
 @router.get("/inbox/caretaker")
-def caretaker_inbox(caretaker_id: str = Query(...), date_filter: str = Query(default_factory=today_str)):
-    docs = (
-        db.collection("nudges")
-        .where("caretaker_id", "==", caretaker_id)
-        .where("date", "==", date_filter)
-        .stream()
-    )
+def caretaker_inbox(
+    caretaker_id: str = Query(...),
+    date_filter: str = Query(default_factory=today_str),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    ensure_caretaker_access(current_user, caretaker_id)
+    docs = nudge_repo.list_for_caretaker_on_date(caretaker_id=caretaker_id, date_filter=date_filter)
     items = []
     for doc in docs:
-        data = doc.to_dict() or {}
-        if data.get("target_role", "caretaker") != "caretaker":
+        if doc.get("target_role", "caretaker") != "caretaker":
             continue
-        items.append({"nudge_id": doc.id, **data})
+        items.append(doc)
     return {"success": True, "role": "caretaker", "count": len(items), "nudges": items}
 
 
 @router.get("/inbox/user")
-def user_inbox(user_id: str = Query(...), date_filter: str = Query(default_factory=today_str)):
-    docs = (
-        db.collection("nudges")
-        .where("user_id", "==", user_id)
-        .where("date", "==", date_filter)
-        .stream()
-    )
+def user_inbox(
+    user_id: str = Query(...),
+    date_filter: str = Query(default_factory=today_str),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    ensure_user_access(current_user, user_id)
+    docs = nudge_repo.list_for_user_on_date(user_id=user_id, date_filter=date_filter)
     items = []
     for doc in docs:
-        data = doc.to_dict() or {}
-        if data.get("target_role") != "user":
+        if doc.get("target_role") != "user":
             continue
-        items.append({"nudge_id": doc.id, **data})
+        items.append(doc)
     return {"success": True, "role": "user", "count": len(items), "nudges": items}
 
 
 @router.get("/expiry-alerts")
 def get_expiry_alerts(
     caretaker_id: str = Query(...),
+    current_user: AuthUser = Depends(get_current_user),
 ):
-    query = (
-        db.collection("nudges")
-        .where("caretaker_id", "==", caretaker_id)
-        .where("type", "==", "expiry_alert")
-        .where("status", "==", "pending")
-    )
-
-    alerts = []
-    for doc in query.stream():
-        data = doc.to_dict() or {}
-        alerts.append({"nudge_id": doc.id, **data})
+    ensure_caretaker_access(current_user, caretaker_id)
+    alerts = nudge_repo.list_pending_expiry_alerts(caretaker_id=caretaker_id)
 
     return {
         "caretaker_id": caretaker_id,
@@ -407,29 +428,25 @@ def cleanup_old_nudges(
     limit: int = Query(500, ge=1, le=1000),
     dry_run: bool = Query(True),
     confirm: str = Query(""),
+    _: AuthUser = Depends(require_admin),
+    __: None = Depends(rate_limit("nudges-cleanup", limit=5)),
 ):
     try:
         date.fromisoformat(before_date)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid before_date. Use YYYY-MM-DD")
 
-    docs = list(
-        db.collection("nudges")
-        .where("date", "<", before_date)
-        .limit(limit)
-        .stream()
-    )
+    docs = nudge_repo.list_before_date(before_date=before_date, limit=limit)
 
     preview = []
     for doc in docs[:20]:
-        data = doc.to_dict() or {}
         preview.append(
             {
-                "id": doc.id,
-                "date": data.get("date"),
-                "caretaker_id": data.get("caretaker_id"),
-                "time_bucket": data.get("time_bucket"),
-                "type": data.get("type", "medicine_reminder"),
+                "id": doc.get("id"),
+                "date": doc.get("date"),
+                "caretaker_id": doc.get("caretaker_id"),
+                "time_bucket": doc.get("time_bucket"),
+                "type": doc.get("type", "medicine_reminder"),
             }
         )
 
@@ -448,23 +465,7 @@ def cleanup_old_nudges(
             detail="Deletion blocked. Use dry_run=true or pass confirm=DELETE",
         )
 
-    batch = db.batch()
-    batch_size = 0
-    deleted = 0
-
-    for doc in docs:
-        batch.delete(doc.reference)
-        batch_size += 1
-
-        if batch_size >= 450:
-            batch.commit()
-            deleted += batch_size
-            batch = db.batch()
-            batch_size = 0
-
-    if batch_size > 0:
-        batch.commit()
-        deleted += batch_size
+    deleted = nudge_repo.delete_by_ids([doc.get("id", "") for doc in docs if doc.get("id")])
 
     return {
         "success": True,

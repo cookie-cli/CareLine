@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "defaults": {
+    "protected": true,
+    "enabled": true
+  },
+  "endpoints": [
+    {
+      "id": "root",
+      "method": "GET",
+      "path": "/",
+      "protected": false,
+      "expected_unauth_statuses": [200],
+      "expected_auth_statuses": [200],
+      "tags": ["public", "smoke"]
+    },
+    {
+      "id": "health",
+      "method": "GET",
+      "path": "/health",
+      "protected": false,
+      "expected_unauth_statuses": [200],
+      "expected_auth_statuses": [200],
+      "tags": ["public", "smoke"]
+    },
+    {
+      "id": "audio_status",
+      "method": "GET",
+      "path": "/api/v1/audio/status",
+      "expected_auth_statuses": [200],
+      "tags": ["audio", "smoke"]
+    },
+    {
+      "id": "scanner_status",
+      "method": "GET",
+      "path": "/api/v1/scanner/status",
+      "expected_auth_statuses": [200],
+      "tags": ["scanner", "smoke"]
+    },
+    {
+      "id": "nudges_health",
+      "method": "GET",
+      "path": "/api/v1/nudges/health",
+      "expected_auth_statuses": [200],
+      "tags": ["nudges", "smoke"]
+    },
+    {
+      "id": "status_health",
+      "method": "GET",
+      "path": "/api/v1/status/health",
+      "expected_auth_statuses": [200],
+      "tags": ["status", "smoke"]
+    },
+    {
+      "id": "prescriptions_list",
+      "method": "GET",
+      "path": "/api/v1/prescriptions/",
+      "expected_auth_statuses": [200],
+      "tags": ["prescriptions", "read"]
+    },
+    {
+      "id": "prescription_get",
+      "method": "GET",
+      "path": "/api/v1/prescriptions/{PRESCRIPTION_ID}",
+      "expected_auth_statuses": [200, 404],
+      "tags": ["prescriptions", "read"]
+    },
+    {
+      "id": "linking_create_code",
+      "method": "POST",
+      "path": "/api/v1/linking/create-code",
+      "query": {
+        "caretaker_id": "{CARETAKER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["linking", "write"]
+    },
+    {
+      "id": "linking_create_qr",
+      "method": "POST",
+      "path": "/api/v1/linking/create-qr",
+      "query": {
+        "caretaker_id": "{CARETAKER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["linking", "write", "qr"]
+    },
+    {
+      "id": "linking_connect",
+      "method": "POST",
+      "path": "/api/v1/linking/connect",
+      "query": {
+        "user_id": "{USER_ID}",
+        "code": "{LINK_CODE}"
+      },
+      "expected_auth_statuses": [200, 400, 403],
+      "tags": ["linking", "write"]
+    },
+    {
+      "id": "linking_connect_qr",
+      "method": "POST",
+      "path": "/api/v1/linking/connect-qr",
+      "query": {
+        "user_id": "{USER_ID}",
+        "qr_payload": "{QR_PAYLOAD}"
+      },
+      "expected_auth_statuses": [200, 400, 403],
+      "tags": ["linking", "write", "qr"]
+    },
+    {
+      "id": "linking_caretaker_users",
+      "method": "GET",
+      "path": "/api/v1/linking/caretaker/{CARETAKER_ID}/users",
+      "expected_auth_statuses": [200, 403],
+      "tags": ["linking", "read"]
+    },
+    {
+      "id": "linking_user_caretaker",
+      "method": "GET",
+      "path": "/api/v1/linking/user/{USER_ID}/caretaker",
+      "expected_auth_statuses": [200, 404, 403],
+      "tags": ["linking", "read"]
+    },
+    {
+      "id": "status_today",
+      "method": "GET",
+      "path": "/api/v1/status/today",
+      "query": {
+        "caretaker_id": "{CARETAKER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["status", "read"]
+    },
+    {
+      "id": "status_caretaker_today",
+      "method": "GET",
+      "path": "/api/v1/status/caretaker-today",
+      "query": {
+        "caretaker_id": "{CARETAKER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["status", "read"]
+    },
+    {
+      "id": "status_user_today",
+      "method": "GET",
+      "path": "/api/v1/status/user-today",
+      "query": {
+        "user_id": "{USER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["status", "read"]
+    },
+    {
+      "id": "nudges_today_status",
+      "method": "GET",
+      "path": "/api/v1/nudges/today-status",
+      "query": {
+        "caretaker_id": "{CARETAKER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["nudges", "read"]
+    },
+    {
+      "id": "nudges_today_status_user",
+      "method": "GET",
+      "path": "/api/v1/nudges/today-status-user",
+      "query": {
+        "user_id": "{USER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["nudges", "read"]
+    },
+    {
+      "id": "nudges_send",
+      "method": "POST",
+      "path": "/api/v1/nudges/send",
+      "query": {
+        "user_id": "{USER_ID}",
+        "caretaker_id": "{CARETAKER_ID}",
+        "time_bucket": "morning"
+      },
+      "expected_auth_statuses": [200, 403, 422],
+      "tags": ["nudges", "write"]
+    },
+    {
+      "id": "nudges_inbox_caretaker",
+      "method": "GET",
+      "path": "/api/v1/nudges/inbox/caretaker",
+      "query": {
+        "caretaker_id": "{CARETAKER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["nudges", "read"]
+    },
+    {
+      "id": "nudges_inbox_user",
+      "method": "GET",
+      "path": "/api/v1/nudges/inbox/user",
+      "query": {
+        "user_id": "{USER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["nudges", "read"]
+    },
+    {
+      "id": "nudges_expiry_alerts",
+      "method": "GET",
+      "path": "/api/v1/nudges/expiry-alerts",
+      "query": {
+        "caretaker_id": "{CARETAKER_ID}"
+      },
+      "expected_auth_statuses": [200, 403],
+      "tags": ["nudges", "read"]
+    },
+    {
+      "id": "audio_upload",
+      "method": "POST",
+      "path": "/api/v1/audio/upload",
+      "enabled": true,
+      "notes": "Enable when you want to include multipart upload tests.",
+      "tags": ["audio", "write", "multipart"]
+    },
+    {
+      "id": "scanner_image",
+      "method": "POST",
+      "path": "/api/v1/scanner/image",
+      "enabled": true,
+      "notes": "Enable when you want to include multipart upload tests.",
+      "tags": ["scanner", "write", "multipart"]
+    }
+  ]
+}

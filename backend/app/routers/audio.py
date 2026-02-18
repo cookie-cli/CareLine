@@ -1,14 +1,19 @@
 # app/routers/audio.py
 
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from app.database.firebase import save_prescription
 from app.services.prescription_flow import (
     cleanup_temp_file,
     persist_upload_to_temp,
     process_audio_file_to_draft,
 )
+from app.security import AuthUser, get_current_user, rate_limit
 
-router = APIRouter(prefix="/audio", tags=["audio"])
+router = APIRouter(
+    prefix="/audio",
+    tags=["audio"],
+    dependencies=[Depends(get_current_user)],
+)
 
 ALLOWED_AUDIO_TYPES = [
     "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav",
@@ -26,7 +31,9 @@ async def upload_audio(
     audio: UploadFile = File(...),
     language: str = Form(default="auto"),
     patient_name: str = Form(default=""),
-    auto_save: bool = Form(default=False)
+    auto_save: bool = Form(default=False),
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("audio-upload", limit=10)),
 ):
     """Upload audio → Transcribe → Extract → Return editable draft (or save if auto_save=true)."""
 
@@ -51,7 +58,11 @@ async def upload_audio(
 
         doc_id = None
         if auto_save:
-            doc_id = save_prescription({**draft_data, "type": "audio_transcription"}, audio.filename)
+            payload = {**draft_data, "type": "audio_transcription"}
+            payload.setdefault("user_id", current_user.user_id)
+            if current_user.role == "caretaker":
+                payload.setdefault("caretaker_id", current_user.user_id)
+            doc_id = save_prescription(payload, audio.filename)
 
         return {
             "success": True,
@@ -72,6 +83,8 @@ async def process_recorded_audio(
     audio: UploadFile = File(...),
     patient_name: str = Form(default=""),
     auto_save: bool = Form(default=False),
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("audio-record", limit=10)),
 ):
     """Browser recording endpoint"""
     return await upload_audio(
@@ -79,6 +92,7 @@ async def process_recorded_audio(
         language="auto",
         patient_name=patient_name,
         auto_save=auto_save,
+        current_user=current_user,
     )
 
 @router.get("/status")

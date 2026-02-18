@@ -1,10 +1,11 @@
 # app/services/extraction.py
 
 import json
-from groq import Groq
-from app.config import settings
+import logging
 
-client = Groq(api_key=settings.GROQ_API_KEY)
+from app.services.groq_client import get_groq_client
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a medical prescription parser. Extract medicine information from the text and return ONLY valid JSON.
 
@@ -38,6 +39,7 @@ def extract_medicines(text: str) -> dict:
         return {"medicines": [], "patient_name": "", "notes": "", "error": "Empty input text"}
 
     try:
+        client = get_groq_client()
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -58,10 +60,11 @@ def extract_medicines(text: str) -> dict:
         if "notes" not in result:
             result["notes"] = ""
         return result
-    except Exception as e:
+    except Exception:
+        logger.exception("Medicine extraction failed")
         return {
             "medicines": [],
             "patient_name": "",
             "notes": "",
-            "error": str(e),
+            "error": "Extraction service unavailable",
         }

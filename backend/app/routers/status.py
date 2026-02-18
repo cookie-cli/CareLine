@@ -1,6 +1,7 @@
 from datetime import date
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from app.security import AuthUser, ensure_caretaker_access, ensure_user_access, get_current_user
 from app.services.family_linking import get_caretaker_for_user, get_users_for_caretaker
 from app.services.nudges_engine import (
     ensure_daily_medicine_nudges,
@@ -9,7 +10,11 @@ from app.services.nudges_engine import (
     get_today_bucket_status_for_user,
 )
 
-router = APIRouter(prefix="/status", tags=["status"])
+router = APIRouter(
+    prefix="/status",
+    tags=["status"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def today_date() -> date:
@@ -23,11 +28,13 @@ def today_str() -> str:
 @router.get("/today")
 def get_today_status(
     caretaker_id: str = Query(..., description="Caretaker user id"),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Returns today's expected medicines + taken/pending status for caretaker.
     Works even when no linked user exists.
     """
+    ensure_caretaker_access(current_user, caretaker_id)
     today = today_date()
     today_iso = today_str()
     users = get_users_for_caretaker(caretaker_id)
@@ -61,8 +68,12 @@ def get_today_status(
 
 
 @router.get("/caretaker-today")
-def get_caretaker_today(caretaker_id: str = Query(..., description="Caretaker user id")):
-    data = get_today_status(caretaker_id)
+def get_caretaker_today(
+    caretaker_id: str = Query(..., description="Caretaker user id"),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    ensure_caretaker_access(current_user, caretaker_id)
+    data = get_today_status(caretaker_id, current_user)
     return {
         "date": data["date"],
         "role": "caretaker",
@@ -75,7 +86,11 @@ def get_caretaker_today(caretaker_id: str = Query(..., description="Caretaker us
 
 
 @router.get("/user-today")
-def get_user_today(user_id: str = Query(..., description="User id")):
+def get_user_today(
+    user_id: str = Query(..., description="User id"),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    ensure_user_access(current_user, user_id)
     today_iso = today_str()
     caretaker_id = get_caretaker_for_user(user_id)
     linked = True

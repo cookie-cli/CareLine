@@ -4,6 +4,7 @@ from typing import Any, Dict, Iterable
 
 from fastapi import HTTPException, UploadFile
 
+from app.config import settings
 from app.services.correction import correct_medicine_names
 from app.services.extraction import extract_medicines
 from app.services.prescription_builder import build_audio_draft, merge_draft_with_edits
@@ -30,10 +31,28 @@ async def persist_upload_to_temp(
         else os.path.splitext(upload.filename or "")[1] or default_suffix
     )
 
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    total = 0
+    content_parts: list[bytes] = []
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        content = await upload.read()
-        tmp.write(content)
-        return tmp.name, content
+        while True:
+            chunk = await upload.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                tmp_path = tmp.name
+                tmp.close()
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Max {settings.MAX_UPLOAD_SIZE_MB}MB",
+                )
+            tmp.write(chunk)
+            content_parts.append(chunk)
+        return tmp.name, b"".join(content_parts)
 
 
 def process_audio_file_to_draft(
@@ -100,4 +119,3 @@ def build_final_prescription_data(
     final_data["status"] = "active"
     final_data["reviewed"] = True
     return final_data
-

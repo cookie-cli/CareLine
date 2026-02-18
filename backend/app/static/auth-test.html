@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CareLine Auth + API Tester</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f4f6f8; color: #1a1a1a; }
+    .wrap { max-width: 980px; margin: 20px auto; background: #fff; padding: 20px; border-radius: 10px; }
+    h1 { margin: 0 0 12px; }
+    h2 { margin: 20px 0 8px; font-size: 18px; }
+    label { display: block; margin: 8px 0 4px; font-weight: 600; }
+    input, textarea, button, select { font: inherit; }
+    input, textarea, select { width: 100%; padding: 10px; border: 1px solid #c7cdd4; border-radius: 6px; }
+    textarea { min-height: 120px; }
+    .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    button { padding: 10px 14px; border: 0; border-radius: 6px; background: #1769aa; color: #fff; cursor: pointer; }
+    button.secondary { background: #4a5a67; }
+    button.warn { background: #b33a3a; }
+    pre { background: #111827; color: #e5e7eb; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
+    .small { color: #55616d; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>CareLine Auth + API Tester</h1>
+    <p class="small">Use this page to sign in with Firebase Auth, get an ID token, and test backend APIs.</p>
+
+    <h2>1) Firebase Config</h2>
+    <label for="firebaseConfig">Paste Firebase web config JSON</label>
+    <textarea id="firebaseConfig">{
+  "apiKey": "",
+  "authDomain": "careline-4ebdf.firebaseapp.com",
+  "projectId": "careline-4ebdf",
+  "storageBucket": "careline-4ebdf.firebasestorage.app",
+  "messagingSenderId": "",
+  "appId": ""
+}</textarea>
+    <div class="row">
+      <button id="initBtn">Initialize Firebase</button>
+    </div>
+
+    <h2>2) Sign In</h2>
+    <div class="grid">
+      <div>
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="testuser@example.com">
+      </div>
+      <div>
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="password">
+      </div>
+    </div>
+    <div class="row" style="margin-top: 10px;">
+      <button id="signInBtn">Sign In</button>
+      <button id="tokenBtn" class="secondary">Refresh ID Token</button>
+      <button id="signOutBtn" class="warn">Sign Out</button>
+    </div>
+
+    <h2>3) Backend Test</h2>
+    <div class="grid">
+      <div>
+        <label for="baseUrl">Backend Base URL</label>
+        <input id="baseUrl" value="http://127.0.0.1:8000">
+      </div>
+      <div>
+        <label for="endpoint">Endpoint</label>
+        <select id="endpoint">
+          <option value="/health">GET /health (public)</option>
+          <option value="/api/v1/nudges/health">GET /api/v1/nudges/health (protected)</option>
+          <option value="/api/v1/status/health">GET /api/v1/status/health (protected)</option>
+          <option value="/api/v1/prescriptions/">GET /api/v1/prescriptions/ (protected)</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" style="margin-top: 10px;">
+      <button id="callUnauthBtn" class="secondary">Call Without Token</button>
+      <button id="callAuthBtn">Call With Token</button>
+      <button id="smokeBtn">Run Smoke Series</button>
+    </div>
+
+    <h2>Logs</h2>
+    <pre id="logs">Ready.</pre>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+  <script>
+    let app = null;
+    let auth = null;
+    let idToken = "";
+
+    const logs = document.getElementById("logs");
+    const firebaseConfigEl = document.getElementById("firebaseConfig");
+    const emailEl = document.getElementById("email");
+    const passwordEl = document.getElementById("password");
+    const baseUrlEl = document.getElementById("baseUrl");
+    const endpointEl = document.getElementById("endpoint");
+
+    function log(line) {
+      const now = new Date().toLocaleTimeString();
+      logs.textContent += "\\n[" + now + "] " + line;
+      logs.scrollTop = logs.scrollHeight;
+    }
+
+    function normalizeFirebaseConfigInput(raw) {
+      let text = (raw || "").trim();
+      if (!text) throw new Error("Firebase config is empty");
+
+      // Accept pasted JS snippets like: const firebaseConfig = { ... };
+      text = text.replace(/\/\*[\s\S]*?\*\//g, "");
+      text = text.replace(/^\s*\/\/.*$/gm, "");
+      text = text.replace(/^\s*(const|let|var)\s+firebaseConfig\s*=\s*/, "");
+      text = text.replace(/;\s*$/, "");
+
+      const firstBrace = text.indexOf("{");
+      const lastBrace = text.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        text = text.slice(firstBrace, lastBrace + 1);
+      }
+
+      // Convert JS object literal style into valid JSON.
+      text = text.replace(/,\s*}/g, "}");
+      text = text.replace(/,\s*]/g, "]");
+      text = text.replace(/([\{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":');
+      text = text.replace(/'/g, '"');
+      return text;
+    }
+
+    function readConfig() {
+      try {
+        const normalized = normalizeFirebaseConfigInput(firebaseConfigEl.value);
+        const parsed = JSON.parse(normalized);
+        if (!parsed.apiKey || !parsed.projectId || !parsed.appId) {
+          throw new Error("apiKey, projectId, and appId are required");
+        }
+        return parsed;
+      } catch (e) {
+        throw new Error("Invalid Firebase config format: " + e.message);
+      }
+    }
+
+    async function getToken(forceRefresh = false) {
+      if (!auth || !auth.currentUser) throw new Error("No signed-in user");
+      idToken = await auth.currentUser.getIdToken(forceRefresh);
+      log("ID token ready. UID: " + auth.currentUser.uid);
+      return idToken;
+    }
+
+    async function callEndpoint(path, withToken) {
+      const base = baseUrlEl.value.trim().replace(/\/$/, "");
+      const url = base + path;
+      const headers = { "Accept": "application/json" };
+      if (withToken) {
+        const token = idToken || await getToken(false);
+        headers["Authorization"] = "Bearer " + token;
+      }
+      const res = await fetch(url, { method: "GET", headers });
+      let body = "";
+      try { body = JSON.stringify(await res.json(), null, 2); }
+      catch (_) { body = await res.text(); }
+      log((withToken ? "AUTH " : "UNAUTH ") + path + " -> " + res.status);
+      log(body);
+      return res.status;
+    }
+
+    document.getElementById("initBtn").onclick = () => {
+      try {
+        const cfg = readConfig();
+        app = firebase.apps.length ? firebase.app() : firebase.initializeApp(cfg);
+        auth = firebase.auth();
+        log("Firebase initialized.");
+      } catch (e) {
+        log("Init failed: " + e.message);
+      }
+    };
+
+    document.getElementById("signInBtn").onclick = async () => {
+      try {
+        if (!auth) throw new Error("Initialize Firebase first");
+        const cred = await auth.signInWithEmailAndPassword(emailEl.value.trim(), passwordEl.value);
+        idToken = await cred.user.getIdToken(true);
+        log("Signed in. UID: " + cred.user.uid);
+      } catch (e) {
+        log("Sign-in failed: " + e.message);
+      }
+    };
+
+    document.getElementById("tokenBtn").onclick = async () => {
+      try { await getToken(true); }
+      catch (e) { log("Token refresh failed: " + e.message); }
+    };
+
+    document.getElementById("signOutBtn").onclick = async () => {
+      try {
+        if (auth) await auth.signOut();
+        idToken = "";
+        log("Signed out.");
+      } catch (e) {
+        log("Sign-out failed: " + e.message);
+      }
+    };
+
+    document.getElementById("callUnauthBtn").onclick = async () => {
+      try { await callEndpoint(endpointEl.value, false); }
+      catch (e) { log("Call failed: " + e.message); }
+    };
+
+    document.getElementById("callAuthBtn").onclick = async () => {
+      try { await callEndpoint(endpointEl.value, true); }
+      catch (e) { log("Call failed: " + e.message); }
+    };
+
+    document.getElementById("smokeBtn").onclick = async () => {
+      const series = [
+        ["/health", false],
+        ["/api/v1/nudges/health", false],
+        ["/api/v1/nudges/health", true],
+        ["/api/v1/prescriptions/", true]
+      ];
+      for (const [path, withToken] of series) {
+        try { await callEndpoint(path, withToken); }
+        catch (e) { log("Smoke step failed (" + path + "): " + e.message); }
+      }
+      log("Smoke series done.");
+    };
+  </script>
+</body>
+</html>

@@ -321,41 +321,74 @@
         
         function displayResult(data) {
             const extracted = data.extracted;
-            let medicinesHtml = '';
-            
-            if (extracted.medicines && extracted.medicines.length > 0) {
-                medicinesHtml = '<h4>💊 Medicines:</h4><ul class="medicine-list">';
-                extracted.medicines.forEach((med, i) => {
-                    medicinesHtml += `
-                        <li>
-                            <strong>${i + 1}. ${med.name}</strong><br>
-                            ${med.dosage ? `Dosage: ${med.dosage}<br>` : ''}
-                            ${med.frequency ? `Frequency: ${med.frequency}<br>` : ''}
-                            ${med.duration ? `Duration: ${med.duration}<br>` : ''}
-                            ${med.instructions ? `Instructions: ${med.instructions}` : ''}
-                        </li>
-                    `;
-                });
-                medicinesHtml += '</ul>';
+            resultContent.replaceChildren();
+
+            const transcriptBox = document.createElement('div');
+            transcriptBox.className = 'transcript';
+            const transcriptLabel = document.createElement('strong');
+            transcriptLabel.textContent = '📝 Transcript:';
+            transcriptBox.appendChild(transcriptLabel);
+            transcriptBox.appendChild(document.createElement('br'));
+            transcriptBox.appendChild(document.createTextNode(`"${data.transcription.text}"`));
+            resultContent.appendChild(transcriptBox);
+
+            const patient = document.createElement('p');
+            patient.textContent = `Patient: ${extracted.patient_name || 'Not specified'}`;
+            resultContent.appendChild(patient);
+
+            if (extracted.symptoms && extracted.symptoms.length) {
+                const symptoms = document.createElement('p');
+                symptoms.textContent = `Symptoms: ${extracted.symptoms.join(', ')}`;
+                resultContent.appendChild(symptoms);
             }
-            
-            resultContent.innerHTML = `
-                <div class="transcript">
-                    <strong>📝 Transcript:</strong><br>
-                    "${data.transcription.text}"
-                </div>
-                <p><strong>Patient:</strong> ${extracted.patient_name || 'Not specified'}</p>
-                ${extracted.symptoms && extracted.symptoms.length ? `<p><strong>Symptoms:</strong> ${extracted.symptoms.join(', ')}</p>` : ''}
-                ${medicinesHtml}
-                <p><strong>Confidence:</strong> ${extracted.confidence || 'medium'}</p>
-                ${data.document_id ? `<p><strong>Saved:</strong> ✅ (ID: ${data.document_id})</p>` : ''}
-            `;
+
+            if (extracted.medicines && extracted.medicines.length > 0) {
+                const medicinesHeader = document.createElement('h4');
+                medicinesHeader.textContent = '💊 Medicines:';
+                resultContent.appendChild(medicinesHeader);
+
+                const medicinesList = document.createElement('ul');
+                medicinesList.className = 'medicine-list';
+                extracted.medicines.forEach((med, i) => {
+                    const item = document.createElement('li');
+                    const title = document.createElement('strong');
+                    title.textContent = `${i + 1}. ${med.name || 'Medicine'}`;
+                    item.appendChild(title);
+
+                    const details = [];
+                    if (med.dosage) details.push(`Dosage: ${med.dosage}`);
+                    if (med.frequency) details.push(`Frequency: ${med.frequency}`);
+                    if (med.duration) details.push(`Duration: ${med.duration}`);
+                    if (med.instructions) details.push(`Instructions: ${med.instructions}`);
+
+                    if (details.length) {
+                        item.appendChild(document.createElement('br'));
+                        item.appendChild(document.createTextNode(details.join(' | ')));
+                    }
+                    medicinesList.appendChild(item);
+                });
+                resultContent.appendChild(medicinesList);
+            }
+
+            const confidence = document.createElement('p');
+            confidence.textContent = `Confidence: ${extracted.confidence || 'medium'}`;
+            resultContent.appendChild(confidence);
+
+            if (data.document_id) {
+                const saved = document.createElement('p');
+                saved.textContent = `Saved: yes (ID: ${data.document_id})`;
+                resultContent.appendChild(saved);
+            }
         }
         
         function showError(message) {
             result.style.display = 'block';
             result.classList.add('error');
-            resultContent.innerHTML = `<p style="color: #721c24;">${message}</p>`;
+            resultContent.replaceChildren();
+            const p = document.createElement('p');
+            p.style.color = '#721c24';
+            p.textContent = message;
+            resultContent.appendChild(p);
         }
         
         function resetRecording() {

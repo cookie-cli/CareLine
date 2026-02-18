@@ -1,10 +1,9 @@
-# app/services/transcription.py
-
-from groq import Groq
-from app.config import settings
 import json
+import logging
 
-client = Groq(api_key=settings.GROQ_API_KEY)
+from app.services.groq_client import get_groq_client
+
+logger = logging.getLogger(__name__)
 
 def transcribe_audio(audio_path: str, language: str = "en") -> dict:
     """
@@ -12,6 +11,7 @@ def transcribe_audio(audio_path: str, language: str = "en") -> dict:
     Returns: {"text": str, "language": str}
     """
     try:
+        client = get_groq_client()
         with open(audio_path, "rb") as audio_file:
             transcription = client.audio.transcriptions.create(
                 file=audio_file,
@@ -32,13 +32,13 @@ def transcribe_audio(audio_path: str, language: str = "en") -> dict:
             "success": True
         }
         
-    except Exception as e:
-        print(f"Transcription error: {e}")
+    except Exception:
+        logger.exception("Transcription failed")
         return {
             "text": "",
             "language": "",
             "success": False,
-            "error": str(e)
+            "error": "Transcription service unavailable"
         }
 
 def extract_medical_from_transcript(transcript: str) -> dict:
@@ -76,6 +76,7 @@ Return JSON:
 }}"""
 
     try:
+        client = get_groq_client()
         response = client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[
@@ -91,12 +92,12 @@ Return JSON:
         result["raw_transcript"] = transcript
         return result
         
-    except Exception as e:
-        print(f"Extraction error: {e}")
+    except Exception:
+        logger.exception("Medical extraction failed")
         return {
             "patient_name": "",
             "medicines": [],
             "confidence": "low",
             "raw_transcript": transcript,
-            "error": str(e)
+            "error": "Medical extraction failed",
         }

@@ -1,19 +1,23 @@
 # app/routers/scanner.py
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+import base64
+import json
+import logging
+import os
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from app.database.firebase import save_prescription
+from app.security import AuthUser, get_current_user, rate_limit, require_admin
+from app.services.groq_client import get_groq_client
 from app.services.prescription_builder import build_scanner_draft
 from app.services.prescription_flow import cleanup_temp_file, persist_upload_to_temp
-from groq import Groq
-from app.config import settings
-import os
-import base64
-import traceback
-import json
-import re
 
-router = APIRouter(prefix="/scanner", tags=["scanner"])
-client = Groq(api_key=settings.GROQ_API_KEY)
+router = APIRouter(
+    prefix="/scanner",
+    tags=["scanner"],
+    dependencies=[Depends(get_current_user)],
+)
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a specialized medical prescription analyzer with expertise in Ayurvedic and allopathic prescriptions. Extract ALL information and return strict JSON.
 
@@ -112,6 +116,7 @@ def extract_from_image(image_path: str) -> dict:
     mime_type = mime_types.get(ext, 'jpeg')
     
     try:
+        client = get_groq_client()
         response = client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[
@@ -149,7 +154,6 @@ Return structured JSON with all medicines and correct interpretation of abbrevia
         )
         
         content = response.choices[0].message.content.strip()
-        print(f"Raw response: {content[:800]}...")
         
         data = json.loads(content)
         
@@ -168,22 +172,23 @@ Return structured JSON with all medicines and correct interpretation of abbrevia
         return data
         
     except json.JSONDecodeError as e:
-        print(f"JSON decode error: {e}")
-        print(f"Content: {content[:500]}")
+        logger.warning("Scanner response was invalid JSON: %s", e)
         raise ValueError(f"Invalid JSON: {str(e)}")
-    except Exception as e:
-        print(f"Vision API error: {str(e)}")
+    except Exception:
+        logger.exception("Vision API error")
         raise
 
 @router.post("/image")
 async def scan_prescription(
     image: UploadFile = File(..., description="Prescription image"),
     auto_save: bool = Form(default=False),
+    current_user: AuthUser = Depends(get_current_user),
+    _: None = Depends(rate_limit("scan-image", limit=8)),
 ):
     """Scan prescription image and extract structured data"""
 
     allowed = ["image/jpeg", "image/png", "image/jpg", "image/webp"]
-    temp_path, content = await persist_upload_to_temp(
+    temp_path, _content = await persist_upload_to_temp(
         upload=image,
         allowed_types=allowed,
         default_suffix=".jpg",
@@ -191,19 +196,15 @@ async def scan_prescription(
     )
 
     try:
-        print(f"Processing: {image.filename} ({len(content)} bytes)")
-        
         extracted_data = extract_from_image(temp_path)
-        
-        print(f"Patient: {extracted_data['patient']['name']}")
-        print(f"Medicines: {len(extracted_data['medicines'])}")
-        for i, med in enumerate(extracted_data['medicines']):
-            print(f"  {i+1}. {med['name']} - {med['dosage']}")
-        
+
         draft_data = build_scanner_draft(extracted_data=extracted_data, image_filename=image.filename or "")
 
         doc_id = None
         if auto_save:
+            draft_data.setdefault("user_id", current_user.user_id)
+            if current_user.role == "caretaker":
+                draft_data.setdefault("caretaker_id", current_user.user_id)
             doc_id = save_prescription(draft_data, image.filename)
         
         return {
@@ -219,16 +220,18 @@ async def scan_prescription(
             }
         }
         
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Scanner processing failed")
+        raise HTTPException(status_code=500, detail="Failed to process image")
 
     finally:
         cleanup_temp_file(temp_path)
 
 @router.post("/quick-test")
-async def quick_scan_test():
+async def quick_scan_test(
+    _: AuthUser = Depends(require_admin),
+    __: None = Depends(rate_limit("scan-quick-test", limit=5)),
+):
     """Test with mock data"""
     
     mock_data = {

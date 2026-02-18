@@ -1,5 +1,22 @@
 # careline/.gitignore
 .env
+backend/.env
+backend/.env.*
+!backend/.env.example
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.venv/
+venv/
+node_modules/
+*.log
+backend/tests/reports/*.txt
 backend/firebase-key.json
+*firebase*key*.json
+*service-account*.json
+*.pem
+*.key
