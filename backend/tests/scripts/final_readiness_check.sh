@@ -24,8 +24,10 @@ else
 fi
 
 # 2) Sensitive file tracking check
-if git ls-files | rg -q "(^|/)(\\.env|firebase-key\\.json|service-account|.*\\.pem$|.*\\.key$)"; then
-  fail "Sensitive files appear tracked in git. Run: git ls-files | rg '(\\.env|firebase-key\\.json|service-account|\\.pem$|\\.key$)'"
+SENSITIVE_TRACKED="$(git ls-files | grep -E '(^|/)\\.env$|(^|/)firebase-key\\.json$|service-account|\\.pem$|\\.key$' || true)"
+if [ -n "$SENSITIVE_TRACKED" ]; then
+  fail "Sensitive files appear tracked in git:"
+  printf '%s\n' "$SENSITIVE_TRACKED"
 else
   pass "No obvious secrets tracked in git"
 fi

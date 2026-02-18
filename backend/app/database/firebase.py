@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Initialize Firebase
 if not firebase_admin._apps:
     if not os.path.exists(settings.FIREBASE_KEY_PATH):
-        raise FileNotFoundError(f"Firebase key not found: {settings.FIREBASE_KEY_PATH}")
+        raise FileNotFoundError("Firebase key file not found. Set FIREBASE_KEY_PATH to a local service-account JSON file.")
     
     cred = credentials.Certificate(settings.FIREBASE_KEY_PATH)
     firebase_admin.initialize_app(cred)

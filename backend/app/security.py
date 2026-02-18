@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
+import hashlib
 import logging
 from threading import Lock
 import time
@@ -38,7 +39,13 @@ def _extract_bearer_token(request: Request) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing bearer token",
         )
-    return auth_header.split(" ", 1)[1].strip()
+    token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token",
+        )
+    return token
 
 
 def _resolve_role(uid: str, claims: Dict[str, Any]) -> str:
@@ -173,7 +180,8 @@ def rate_limit(
         if settings.AUTH_REQUIRED:
             auth_header = request.headers.get("Authorization", "")
             if auth_header:
-                principal = auth_header[-20:]
+                # Avoid storing raw token material and avoid collisions from suffix-only keys.
+                principal = hashlib.sha256(auth_header.encode("utf-8")).hexdigest()
         bucket_key = f"{key_prefix}:{principal}"
         now = time.time()
         cutoff = now - window_seconds

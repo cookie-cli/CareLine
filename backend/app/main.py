@@ -16,13 +16,14 @@ logger = logging.getLogger(__name__)
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    if request.url.path == "/static/auth-test.html" and not settings.ENABLE_TEST_TOOLS:
+    if request.url.path in {"/static/auth-test.html", "/static/record.html"} and not settings.ENABLE_TEST_TOOLS:
         return JSONResponse(status_code=404, content={"detail": "Not found"})
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(self)"
+    response.headers["Cache-Control"] = "no-store"
     return response
 
 # CORS for browser recording

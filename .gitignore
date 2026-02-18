@@ -16,6 +16,8 @@ node_modules/
 *.log
 backend/tests/reports/*.txt
 backend/firebase-key.json
+backend/.secrets/*
+!backend/.secrets/.gitkeep
 *firebase*key*.json
 *service-account*.json
 *.pem
