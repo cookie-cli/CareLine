@@ -9,6 +9,7 @@ import time
 from typing import Any, Callable, Dict
 
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth as firebase_auth
 
 from app.config import settings
@@ -16,6 +17,7 @@ from app.database.firebase import db
 from app.services.family_linking import get_caretaker_for_user
 
 logger = logging.getLogger(__name__)
+http_bearer = HTTPBearer(auto_error=False)
 
 
 @dataclass
@@ -32,14 +34,18 @@ def _normalize_role(role: str | None) -> str:
     return "user"
 
 
-def _extract_bearer_token(request: Request) -> str:
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header or not auth_header.lower().startswith("bearer "):
+def _extract_bearer_token(credentials: HTTPAuthorizationCredentials | None) -> str:
+    if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing bearer token",
         )
-    token = auth_header.split(" ", 1)[1].strip()
+    if credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token",
+        )
+    token = credentials.credentials.strip()
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -60,11 +66,14 @@ def _resolve_role(uid: str, claims: Dict[str, Any]) -> str:
     return "user"
 
 
-def get_current_user(request: Request) -> AuthUser:
+def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
+) -> AuthUser:
     if not settings.AUTH_REQUIRED:
         return AuthUser(user_id="dev-user", role="admin", claims={})
 
-    token = _extract_bearer_token(request)
+    token = _extract_bearer_token(credentials)
     try:
         decoded = firebase_auth.verify_id_token(
             token,

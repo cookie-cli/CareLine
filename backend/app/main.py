@@ -80,6 +80,12 @@ try:
 except Exception as e:
     logger.exception("Error loading linking router: %s", e)
 
+try:
+    from app.routers import auth
+    app.include_router(auth.router, prefix="/api/v1")
+except Exception as e:
+    logger.exception("Error loading auth router: %s", e)
+
 @app.get("/")
 async def root():
     endpoints = {
@@ -89,6 +95,7 @@ async def root():
         "status": "/api/v1/status",
         "prescriptions": "/api/v1/prescriptions",
         "linking": "/api/v1/linking",
+        "auth": "/api/v1/auth",
         "recorder": "/static/record.html",
     }
     if settings.ENABLE_TEST_TOOLS:
