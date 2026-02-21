@@ -70,6 +70,5 @@ This provides repeatable unauthenticated and authenticated API checks with confi
 
 ## 8. Debug/Test Surface Controls
 - `AUTH_DEBUG` (default `false`): include backend token verify error details only for local debugging.
-- `ENABLE_TEST_TOOLS` (default `false`): blocks `/static/auth-test.html` in normal runtime.
 
-Keep both disabled for production deployments.
+Keep debug flags disabled for production deployments.

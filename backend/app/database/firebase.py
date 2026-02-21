@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime
@@ -31,14 +32,30 @@ def _resolve_key_path(raw_path: str) -> Path:
     )
 
 
-# Initialize Firebase
-if not firebase_admin._apps:
-    key_path = _resolve_key_path(settings.FIREBASE_KEY_PATH)
-    cred = credentials.Certificate(str(key_path))
-    firebase_admin.initialize_app(cred)
-    logger.info("Firebase connected")
+class _UnavailableFirestoreClient:
+    def collection(self, *_: Any, **__: Any) -> Any:
+        raise RuntimeError(
+            "Firestore unavailable: configure FIREBASE_KEY_PATH or set ALLOW_MISSING_FIREBASE=false "
+            "to fail fast during startup."
+        )
 
-db = firestore.client()
+
+def _init_firestore_client():
+    try:
+        if not firebase_admin._apps:
+            key_path = _resolve_key_path(settings.FIREBASE_KEY_PATH)
+            cred = credentials.Certificate(str(key_path))
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase connected")
+        return firestore.client()
+    except FileNotFoundError:
+        if settings.ALLOW_MISSING_FIREBASE:
+            logger.warning("Firebase key not found; running with Firestore disabled")
+            return _UnavailableFirestoreClient()
+        raise
+
+
+db = _init_firestore_client()
 
 def save_prescription(data: dict, audio_file: str = None) -> str:
     """Save to Firestore"""

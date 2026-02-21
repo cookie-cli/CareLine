@@ -1,24 +1,29 @@
 # app/main.py
-
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
 import os
 import logging
 
+from app.api_errors import register_error_handlers
 from app.config import settings
 
-app = FastAPI(title="Medical Prescription API")
+logging.basicConfig(level=logging.INFO)
+
+app = FastAPI(
+    title="Medical Prescription API",
+    version=settings.API_VERSION,
+)
 logger = logging.getLogger(__name__)
+register_error_handlers(app)
 
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    if request.url.path in {"/static/auth-test.html", "/static/record.html"} and not settings.ENABLE_TEST_TOOLS:
-        return JSONResponse(status_code=404, content={"detail": "Not found"})
+    request_id = request.headers.get("X-Request-ID", "").strip() or os.urandom(8).hex()
+    request.state.request_id = request_id
     response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -34,14 +39,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Mount static files
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-    logger.info("Static files mounted at %s", static_dir)
-else:
-    logger.warning("Static directory not found at %s", static_dir)
 
 # Import and include routers with error handling
 try:
@@ -96,10 +93,7 @@ async def root():
         "prescriptions": "/api/v1/prescriptions",
         "linking": "/api/v1/linking",
         "auth": "/api/v1/auth",
-        "recorder": "/static/record.html",
     }
-    if settings.ENABLE_TEST_TOOLS:
-        endpoints["auth_tester"] = "/static/auth-test.html"
     return {
         "message": "Medical Prescription API",
         "endpoints": endpoints,

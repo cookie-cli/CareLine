@@ -1,11 +1,12 @@
 from datetime import date, datetime, timedelta
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from app.repositories import nudge_repo, prescription_repo, user_repo
 from app.security import (
     AuthUser,
+    authenticate_token,
     can_access_nudge,
     can_access_prescription,
     can_access_user,
@@ -22,6 +23,7 @@ from app.services.nudges_engine import (
     get_today_bucket_status,
     get_today_bucket_status_for_user,
 )
+from app.services.realtime import realtime_hub
 
 router = APIRouter(
     prefix="/nudges",
@@ -34,6 +36,51 @@ TimeBucket = Literal["morning", "afternoon", "night"]
 
 def today_str() -> str:
     return date.today().isoformat()
+
+
+@router.websocket("/ws")
+async def nudges_websocket(websocket: WebSocket):
+    token = (websocket.query_params.get("token") or "").strip()
+    auth_header = (websocket.headers.get("authorization") or "").strip()
+    if not token and auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+    if not token:
+        await websocket.close(code=1008, reason="Missing token")
+        return
+
+    try:
+        current_user = authenticate_token(token)
+    except HTTPException:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+
+    rooms = [f"user:{current_user.user_id}"]
+    if current_user.role in {"caretaker", "admin"}:
+        rooms.append(f"caretaker:{current_user.user_id}")
+
+    await websocket.accept()
+    for room in rooms:
+        realtime_hub.connect(room, websocket)
+
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "rooms": rooms,
+            "user_id": current_user.user_id,
+            "role": current_user.role,
+        }
+    )
+
+    try:
+        while True:
+            message = await websocket.receive_text()
+            if message.strip().lower() == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        for room in rooms:
+            realtime_hub.disconnect(room, websocket)
 
 
 def check_expiring_prescriptions():
@@ -80,7 +127,7 @@ def check_expiring_prescriptions():
 
 
 @router.post("/check-expiry-alerts")
-def trigger_expiry_check(
+async def trigger_expiry_check(
     _: AuthUser = Depends(require_admin),
     __: None = Depends(rate_limit("nudges-check-expiry", limit=10)),
 ):
@@ -93,7 +140,7 @@ def trigger_expiry_check(
 
 
 @router.post("/call-doctor")
-def initiate_doctor_call(
+async def initiate_doctor_call(
     prescription_id: str,
     nudge_id: Optional[str] = None,
     current_user: AuthUser = Depends(get_current_user),
@@ -152,7 +199,7 @@ def initiate_doctor_call(
 
 
 @router.get("/doctor-info/{prescription_id}")
-def get_doctor_info(
+async def get_doctor_info(
     prescription_id: str,
     current_user: AuthUser = Depends(get_current_user),
 ):
@@ -170,7 +217,7 @@ def get_doctor_info(
 
 
 @router.post("/send")
-def send_nudge(
+async def send_nudge(
     user_id: str,
     caretaker_id: str,
     time_bucket: TimeBucket,
@@ -205,7 +252,7 @@ def send_nudge(
 
 
 @router.post("/respond")
-def respond_to_nudge(
+async def respond_to_nudge(
     nudge_id: str,
     response: Literal[
         "taken",
@@ -286,7 +333,7 @@ def respond_to_nudge(
 
 
 @router.get("/today-status")
-def get_today_status(
+async def get_today_status(
     caretaker_id: str = Query(..., description="Caretaker user id"),
     current_user: AuthUser = Depends(get_current_user),
 ):
@@ -303,7 +350,7 @@ def get_today_status(
 
 
 @router.get("/today-status-user")
-def get_today_status_user(
+async def get_today_status_user(
     user_id: str = Query(..., description="User id"),
     current_user: AuthUser = Depends(get_current_user),
 ):
@@ -320,7 +367,7 @@ def get_today_status_user(
 
 
 @router.post("/sync-daily")
-def sync_daily_nudges(
+async def sync_daily_nudges(
     caretaker_id: str,
     user_id: str = "",
     for_date: str = Query(default_factory=today_str),
@@ -356,7 +403,7 @@ def sync_daily_nudges(
 
 
 @router.post("/user-tick")
-def user_tick_reminder(
+async def user_tick_reminder(
     nudge_id: str,
     action: Literal["taken", "skipped", "call_caretaker"] = "taken",
     current_user: AuthUser = Depends(get_current_user),
@@ -366,7 +413,7 @@ def user_tick_reminder(
 
 
 @router.post("/caretaker-tick")
-def caretaker_tick_reminder(
+async def caretaker_tick_reminder(
     nudge_id: str,
     action: Literal["checked", "remind_user", "call_user"] = "checked",
     current_user: AuthUser = Depends(get_current_user),
@@ -376,7 +423,7 @@ def caretaker_tick_reminder(
 
 
 @router.get("/inbox/caretaker")
-def caretaker_inbox(
+async def caretaker_inbox(
     caretaker_id: str = Query(...),
     date_filter: str = Query(default_factory=today_str),
     current_user: AuthUser = Depends(get_current_user),
@@ -392,7 +439,7 @@ def caretaker_inbox(
 
 
 @router.get("/inbox/user")
-def user_inbox(
+async def user_inbox(
     user_id: str = Query(...),
     date_filter: str = Query(default_factory=today_str),
     current_user: AuthUser = Depends(get_current_user),
@@ -408,7 +455,7 @@ def user_inbox(
 
 
 @router.get("/expiry-alerts")
-def get_expiry_alerts(
+async def get_expiry_alerts(
     caretaker_id: str = Query(...),
     current_user: AuthUser = Depends(get_current_user),
 ):
@@ -423,7 +470,7 @@ def get_expiry_alerts(
 
 
 @router.delete("/cleanup-old")
-def cleanup_old_nudges(
+async def cleanup_old_nudges(
     before_date: str = Query(default_factory=today_str),
     limit: int = Query(500, ge=1, le=1000),
     dry_run: bool = Query(True),
@@ -476,7 +523,7 @@ def cleanup_old_nudges(
 
 
 @router.get("/health")
-def nudges_health():
+async def nudges_health():
     return {
         "nudges": "ok",
         "expiry_alerts": "enabled",

@@ -24,17 +24,6 @@ uvicorn app.main:app --reload
 
 Default base URL used by bot: `http://127.0.0.1:8000`
 
-## Browser Auth Tester (No frontend app needed)
-Open:
-
-`http://127.0.0.1:8000/static/auth-test.html`
-
-Flow:
-1. Paste Firebase web config JSON.
-2. Initialize Firebase.
-3. Sign in with test email/password.
-4. Run unauth/auth endpoint calls and smoke series.
-
 ## 4. Configure test environment variables
 In another terminal:
 
@@ -150,8 +139,21 @@ sh backend/tests/scripts/final_readiness_check.sh
 This checks:
 - compile sanity
 - secret-file tracking in git
-- secure runtime flags (`AUTH_DEBUG`, `ENABLE_TEST_TOOLS`, `AUTH_REQUIRED`)
+- secure runtime flags (`AUTH_DEBUG`, `AUTH_REQUIRED`)
+- `ALLOWED_ORIGINS` presence
+- CORS wildcard policy in `ALLOWED_ORIGINS`
 - optional runtime `/health` preflight
+
+## API contract snapshot
+To freeze backend contract for frontend integration:
+
+```bash
+cd backend
+python tests/scripts/export_openapi_contract.py
+```
+
+Snapshot path:
+- `backend/tests/catalog/openapi_snapshot.json`
 
 ## 8. Suggested full validation order
 1. `--mode unauth --tags smoke` (fast policy sanity)

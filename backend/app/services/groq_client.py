@@ -12,4 +12,7 @@ def get_groq_client() -> Groq:
     api_key = (settings.GROQ_API_KEY or "").strip()
     if not api_key or api_key.startswith("your_"):
         raise RuntimeError("GROQ_API_KEY is not configured")
-    return Groq(api_key=api_key)
+    return Groq(
+        api_key=api_key,
+        timeout=float(settings.OUTBOUND_TIMEOUT_SECONDS),
+    )

@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.database.firebase import db
+from app.services.realtime import realtime_hub
 from app.services.prescription_schedule import TIME_BUCKETS, aggregate_expected_schedule, expected_schedule_from_prescription
 
 
@@ -156,7 +157,14 @@ def _create_user_nudge(
     if prescription_id:
         payload["prescription_id"] = prescription_id
     ref = db.collection("nudges").add(payload)
-    return ref[1].id
+    nudge_id = ref[1].id
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(realtime_hub.emit_nudge_event("created", {**payload, "nudge_id": nudge_id}))
+    except RuntimeError:
+        pass
+    return nudge_id
 
 
 def _create_caretaker_action_nudge(
@@ -183,7 +191,14 @@ def _create_caretaker_action_nudge(
         "linked_user_nudge_id": user_nudge_id,
     }
     ref = db.collection("nudges").add(payload)
-    return ref[1].id
+    nudge_id = ref[1].id
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(realtime_hub.emit_nudge_event("created", {**payload, "nudge_id": nudge_id}))
+    except RuntimeError:
+        pass
+    return nudge_id
 
 
 def ensure_daily_medicine_nudges(

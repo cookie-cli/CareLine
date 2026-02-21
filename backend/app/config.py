@@ -25,23 +25,26 @@ def _get_int(name: str, default: int) -> int:
 
 
 class Settings:
+    API_VERSION = os.getenv("API_VERSION", "v1")
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     FIREBASE_KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "firebase-key.json")
+    ALLOW_MISSING_FIREBASE = _get_bool("ALLOW_MISSING_FIREBASE", False)
     AUTH_REQUIRED = _get_bool("AUTH_REQUIRED", True)
     AUTH_DEBUG = _get_bool("AUTH_DEBUG", False)
     FIREBASE_CHECK_REVOKED = _get_bool("FIREBASE_CHECK_REVOKED", False)
-    ENABLE_TEST_TOOLS = _get_bool("ENABLE_TEST_TOOLS", False)
+    FIREBASE_CLOCK_SKEW_SECONDS = _get_int("FIREBASE_CLOCK_SKEW_SECONDS", 60)
     LINK_CODE_LENGTH = _get_int("LINK_CODE_LENGTH", 8)
     LINK_CODE_MAX_ATTEMPTS = _get_int("LINK_CODE_MAX_ATTEMPTS", 8)
     LINK_QR_BASE_URL = os.getenv("LINK_QR_BASE_URL", "https://careline.app/link")
     LINK_CODE_PEPPER = os.getenv("LINK_CODE_PEPPER", "")
     ALLOWED_ORIGINS = [
         origin.strip()
-        for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+        for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
         if origin.strip()
     ]
     MAX_UPLOAD_SIZE_MB = _get_int("MAX_UPLOAD_SIZE_MB", 10)
     RATE_LIMIT_PER_MINUTE = _get_int("RATE_LIMIT_PER_MINUTE", 30)
+    OUTBOUND_TIMEOUT_SECONDS = _get_int("OUTBOUND_TIMEOUT_SECONDS", 30)
     
     @classmethod
     def validate(cls):

@@ -1,0 +1,2069 @@
+{
+  "components": {
+    "schemas": {
+      "Body_finalize_prescription_api_v1_prescriptions_finalize_post": {
+        "properties": {
+          "create_nudges": {
+            "default": true,
+            "description": "Create daily reminder nudges if caretaker_id exists",
+            "title": "Create Nudges",
+            "type": "boolean"
+          },
+          "draft_data": {
+            "description": "Draft payload from scanner/audio endpoint",
+            "title": "Draft Data",
+            "type": "object"
+          },
+          "edits": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only changed fields from frontend",
+            "title": "Edits"
+          },
+          "file_name": {
+            "default": "",
+            "description": "Original file name if any",
+            "title": "File Name",
+            "type": "string"
+          },
+          "source": {
+            "description": "audio | scanner | manual",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "draft_data"
+        ],
+        "title": "Body_finalize_prescription_api_v1_prescriptions_finalize_post",
+        "type": "object"
+      },
+      "Body_process_audio_api_v1_prescriptions_process_audio_post": {
+        "properties": {
+          "audio": {
+            "description": "Audio file (WAV, MP3, etc.)",
+            "format": "binary",
+            "title": "Audio",
+            "type": "string"
+          },
+          "auto_save": {
+            "default": false,
+            "title": "Auto Save",
+            "type": "boolean"
+          },
+          "language": {
+            "default": "auto",
+            "title": "Language",
+            "type": "string"
+          },
+          "patient_name": {
+            "default": "",
+            "title": "Patient Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audio"
+        ],
+        "title": "Body_process_audio_api_v1_prescriptions_process_audio_post",
+        "type": "object"
+      },
+      "Body_process_recorded_audio_api_v1_audio_record_post": {
+        "properties": {
+          "audio": {
+            "format": "binary",
+            "title": "Audio",
+            "type": "string"
+          },
+          "auto_save": {
+            "default": false,
+            "title": "Auto Save",
+            "type": "boolean"
+          },
+          "patient_name": {
+            "default": "",
+            "title": "Patient Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audio"
+        ],
+        "title": "Body_process_recorded_audio_api_v1_audio_record_post",
+        "type": "object"
+      },
+      "Body_scan_prescription_api_v1_scanner_image_post": {
+        "properties": {
+          "auto_save": {
+            "default": false,
+            "title": "Auto Save",
+            "type": "boolean"
+          },
+          "image": {
+            "description": "Prescription image",
+            "format": "binary",
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "Body_scan_prescription_api_v1_scanner_image_post",
+        "type": "object"
+      },
+      "Body_upload_audio_api_v1_audio_upload_post": {
+        "properties": {
+          "audio": {
+            "format": "binary",
+            "title": "Audio",
+            "type": "string"
+          },
+          "auto_save": {
+            "default": false,
+            "title": "Auto Save",
+            "type": "boolean"
+          },
+          "language": {
+            "default": "auto",
+            "title": "Language",
+            "type": "string"
+          },
+          "patient_name": {
+            "default": "",
+            "title": "Patient Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audio"
+        ],
+        "title": "Body_upload_audio_api_v1_audio_upload_post",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "Medical Prescription API",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Root"
+      }
+    },
+    "/api/v1/audio/record": {
+      "post": {
+        "description": "Browser recording endpoint",
+        "operationId": "process_recorded_audio_api_v1_audio_record_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_process_recorded_audio_api_v1_audio_record_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Process Recorded Audio",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/api/v1/audio/status": {
+      "get": {
+        "operationId": "audio_status_api_v1_audio_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Audio Status",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/api/v1/audio/upload": {
+      "post": {
+        "description": "Upload audio \u2192 Transcribe \u2192 Extract \u2192 Return editable draft (or save if auto_save=true).",
+        "operationId": "upload_audio_api_v1_audio_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_audio_api_v1_audio_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upload Audio",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/api/v1/auth/bootstrap": {
+      "post": {
+        "operationId": "bootstrap_profile_api_v1_auth_bootstrap_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "user",
+              "enum": [
+                "user",
+                "selfcare"
+              ],
+              "title": "Mode",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Bootstrap Profile",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "get_me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/linking/caretaker/{caretaker_id}/users": {
+      "get": {
+        "operationId": "caretaker_users_api_v1_linking_caretaker__caretaker_id__users_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Caretaker Users",
+        "tags": [
+          "linking"
+        ]
+      }
+    },
+    "/api/v1/linking/connect": {
+      "post": {
+        "operationId": "connect_user_api_v1_linking_connect_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Connect User",
+        "tags": [
+          "linking"
+        ]
+      }
+    },
+    "/api/v1/linking/connect-qr": {
+      "post": {
+        "operationId": "connect_user_qr_api_v1_linking_connect_qr_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "qr_payload",
+            "required": true,
+            "schema": {
+              "title": "Qr Payload",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Connect User Qr",
+        "tags": [
+          "linking"
+        ]
+      }
+    },
+    "/api/v1/linking/create-code": {
+      "post": {
+        "operationId": "create_code_api_v1_linking_create_code_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expires_minutes",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 1440,
+              "minimum": 5,
+              "title": "Expires Minutes",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Code",
+        "tags": [
+          "linking"
+        ]
+      }
+    },
+    "/api/v1/linking/create-qr": {
+      "post": {
+        "operationId": "create_qr_code_api_v1_linking_create_qr_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expires_minutes",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 1440,
+              "minimum": 5,
+              "title": "Expires Minutes",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Qr Code",
+        "tags": [
+          "linking"
+        ]
+      }
+    },
+    "/api/v1/linking/user/{user_id}/caretaker": {
+      "get": {
+        "operationId": "user_caretaker_api_v1_linking_user__user_id__caretaker_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "User Caretaker",
+        "tags": [
+          "linking"
+        ]
+      }
+    },
+    "/api/v1/nudges/call-doctor": {
+      "post": {
+        "operationId": "initiate_doctor_call_api_v1_nudges_call_doctor_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "prescription_id",
+            "required": true,
+            "schema": {
+              "title": "Prescription Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "nudge_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Nudge Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Initiate Doctor Call",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/caretaker-tick": {
+      "post": {
+        "operationId": "caretaker_tick_reminder_api_v1_nudges_caretaker_tick_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "nudge_id",
+            "required": true,
+            "schema": {
+              "title": "Nudge Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "default": "checked",
+              "enum": [
+                "checked",
+                "remind_user",
+                "call_user"
+              ],
+              "title": "Action",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Caretaker Tick Reminder",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/check-expiry-alerts": {
+      "post": {
+        "operationId": "trigger_expiry_check_api_v1_nudges_check_expiry_alerts_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Trigger Expiry Check",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/cleanup-old": {
+      "delete": {
+        "operationId": "cleanup_old_nudges_api_v1_nudges_cleanup_old_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "before_date",
+            "required": false,
+            "schema": {
+              "title": "Before Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confirm",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Confirm",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cleanup Old Nudges",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/doctor-info/{prescription_id}": {
+      "get": {
+        "operationId": "get_doctor_info_api_v1_nudges_doctor_info__prescription_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prescription_id",
+            "required": true,
+            "schema": {
+              "title": "Prescription Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Doctor Info",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/expiry-alerts": {
+      "get": {
+        "operationId": "get_expiry_alerts_api_v1_nudges_expiry_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Expiry Alerts",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/health": {
+      "get": {
+        "operationId": "nudges_health_api_v1_nudges_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Nudges Health",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/inbox/caretaker": {
+      "get": {
+        "operationId": "caretaker_inbox_api_v1_nudges_inbox_caretaker_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_filter",
+            "required": false,
+            "schema": {
+              "title": "Date Filter",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Caretaker Inbox",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/inbox/user": {
+      "get": {
+        "operationId": "user_inbox_api_v1_nudges_inbox_user_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_filter",
+            "required": false,
+            "schema": {
+              "title": "Date Filter",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "User Inbox",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/respond": {
+      "post": {
+        "operationId": "respond_to_nudge_api_v1_nudges_respond_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "nudge_id",
+            "required": true,
+            "schema": {
+              "title": "Nudge Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "response",
+            "required": false,
+            "schema": {
+              "default": "taken",
+              "enum": [
+                "taken",
+                "skipped",
+                "call_user",
+                "checked",
+                "remind_user",
+                "call_caretaker"
+              ],
+              "title": "Response",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Respond To Nudge",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/send": {
+      "post": {
+        "operationId": "send_nudge_api_v1_nudges_send_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "time_bucket",
+            "required": true,
+            "schema": {
+              "enum": [
+                "morning",
+                "afternoon",
+                "night"
+              ],
+              "title": "Time Bucket",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "message",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Message"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Send Nudge",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/sync-daily": {
+      "post": {
+        "operationId": "sync_daily_nudges_api_v1_nudges_sync_daily_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "for_date",
+            "required": false,
+            "schema": {
+              "title": "For Date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Sync Daily Nudges",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/today-status": {
+      "get": {
+        "operationId": "get_today_status_api_v1_nudges_today_status_get",
+        "parameters": [
+          {
+            "description": "Caretaker user id",
+            "in": "query",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "description": "Caretaker user id",
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Today Status",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/today-status-user": {
+      "get": {
+        "operationId": "get_today_status_user_api_v1_nudges_today_status_user_get",
+        "parameters": [
+          {
+            "description": "User id",
+            "in": "query",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "User id",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Today Status User",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/nudges/user-tick": {
+      "post": {
+        "operationId": "user_tick_reminder_api_v1_nudges_user_tick_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "nudge_id",
+            "required": true,
+            "schema": {
+              "title": "Nudge Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "default": "taken",
+              "enum": [
+                "taken",
+                "skipped",
+                "call_caretaker"
+              ],
+              "title": "Action",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "User Tick Reminder",
+        "tags": [
+          "nudges"
+        ]
+      }
+    },
+    "/api/v1/prescriptions/": {
+      "get": {
+        "description": "List all prescriptions, optionally filter by patient name",
+        "operationId": "list_prescriptions_api_v1_prescriptions__get",
+        "parameters": [
+          {
+            "description": "Filter by patient name",
+            "in": "query",
+            "name": "patient_name",
+            "required": false,
+            "schema": {
+              "description": "Filter by patient name",
+              "title": "Patient Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Prescriptions",
+        "tags": [
+          "prescriptions"
+        ]
+      }
+    },
+    "/api/v1/prescriptions/finalize": {
+      "post": {
+        "description": "Save final user-reviewed prescription data.\nFrontend flow: scan/upload -> edit draft -> call finalize.",
+        "operationId": "finalize_prescription_api_v1_prescriptions_finalize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_finalize_prescription_api_v1_prescriptions_finalize_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Finalize Prescription",
+        "tags": [
+          "prescriptions"
+        ]
+      }
+    },
+    "/api/v1/prescriptions/process-audio": {
+      "post": {
+        "description": "Upload audio and return draft data for frontend editing.\nSet auto_save=true only for direct-save mode.",
+        "operationId": "process_audio_api_v1_prescriptions_process_audio_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_process_audio_api_v1_prescriptions_process_audio_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Process Audio",
+        "tags": [
+          "prescriptions"
+        ]
+      }
+    },
+    "/api/v1/prescriptions/process-text": {
+      "post": {
+        "description": "Process raw text and return draft for frontend review.",
+        "operationId": "process_text_api_v1_prescriptions_process_text_post",
+        "parameters": [
+          {
+            "description": "Prescription text to process",
+            "in": "query",
+            "name": "text",
+            "required": true,
+            "schema": {
+              "description": "Prescription text to process",
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Patient name",
+            "in": "query",
+            "name": "patient_name",
+            "required": false,
+            "schema": {
+              "default": "Amma",
+              "description": "Patient name",
+              "title": "Patient Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Directly save without frontend review",
+            "in": "query",
+            "name": "auto_save",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Directly save without frontend review",
+              "title": "Auto Save",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Process Text",
+        "tags": [
+          "prescriptions"
+        ]
+      }
+    },
+    "/api/v1/prescriptions/{doc_id}": {
+      "get": {
+        "description": "Get single prescription by ID",
+        "operationId": "get_prescription_api_v1_prescriptions__doc_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Prescription",
+        "tags": [
+          "prescriptions"
+        ]
+      }
+    },
+    "/api/v1/scanner/image": {
+      "post": {
+        "description": "Scan prescription image and extract structured data",
+        "operationId": "scan_prescription_api_v1_scanner_image_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_scan_prescription_api_v1_scanner_image_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Scan Prescription",
+        "tags": [
+          "scanner"
+        ]
+      }
+    },
+    "/api/v1/scanner/quick-test": {
+      "post": {
+        "description": "Test with mock data",
+        "operationId": "quick_scan_test_api_v1_scanner_quick_test_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Quick Scan Test",
+        "tags": [
+          "scanner"
+        ]
+      }
+    },
+    "/api/v1/scanner/status": {
+      "get": {
+        "operationId": "scanner_status_api_v1_scanner_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Scanner Status",
+        "tags": [
+          "scanner"
+        ]
+      }
+    },
+    "/api/v1/status/caretaker-today": {
+      "get": {
+        "operationId": "get_caretaker_today_api_v1_status_caretaker_today_get",
+        "parameters": [
+          {
+            "description": "Caretaker user id",
+            "in": "query",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "description": "Caretaker user id",
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Caretaker Today",
+        "tags": [
+          "status"
+        ]
+      }
+    },
+    "/api/v1/status/health": {
+      "get": {
+        "operationId": "status_health_api_v1_status_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Status Health",
+        "tags": [
+          "status"
+        ]
+      }
+    },
+    "/api/v1/status/today": {
+      "get": {
+        "description": "Returns today's expected medicines + taken/pending status for caretaker.\nWorks even when no linked user exists.",
+        "operationId": "get_today_status_api_v1_status_today_get",
+        "parameters": [
+          {
+            "description": "Caretaker user id",
+            "in": "query",
+            "name": "caretaker_id",
+            "required": true,
+            "schema": {
+              "description": "Caretaker user id",
+              "title": "Caretaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Today Status",
+        "tags": [
+          "status"
+        ]
+      }
+    },
+    "/api/v1/status/user-today": {
+      "get": {
+        "operationId": "get_user_today_api_v1_status_user_today_get",
+        "parameters": [
+          {
+            "description": "User id",
+            "in": "query",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "User id",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get User Today",
+        "tags": [
+          "status"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Check"
+      }
+    }
+  }
+}

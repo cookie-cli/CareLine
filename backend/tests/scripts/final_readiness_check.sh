@@ -35,8 +35,8 @@ fi
 # 3) .env production safety flags (if backend/.env exists)
 if [ -f "backend/.env" ]; then
   auth_debug="$(python -c "from dotenv import dotenv_values; v=dotenv_values('backend/.env'); print((v.get('AUTH_DEBUG') or '').strip().lower())")"
-  enable_tools="$(python -c "from dotenv import dotenv_values; v=dotenv_values('backend/.env'); print((v.get('ENABLE_TEST_TOOLS') or '').strip().lower())")"
   auth_required="$(python -c "from dotenv import dotenv_values; v=dotenv_values('backend/.env'); print((v.get('AUTH_REQUIRED') or '').strip().lower())")"
+  allowed_origins="$(python -c "from dotenv import dotenv_values; v=dotenv_values('backend/.env'); print((v.get('ALLOWED_ORIGINS') or '').strip())")"
 
   if [ "$auth_debug" = "true" ]; then
     fail "AUTH_DEBUG=true in backend/.env (set to false for safe runtime)"
@@ -44,16 +44,28 @@ if [ -f "backend/.env" ]; then
     pass "AUTH_DEBUG is not enabled"
   fi
 
-  if [ "$enable_tools" = "true" ]; then
-    fail "ENABLE_TEST_TOOLS=true in backend/.env (set to false for production)"
-  else
-    pass "ENABLE_TEST_TOOLS is not enabled"
-  fi
-
   if [ -z "$auth_required" ] || [ "$auth_required" = "true" ]; then
     pass "AUTH_REQUIRED is enabled (or default-enabled)"
   else
     fail "AUTH_REQUIRED is disabled"
+  fi
+
+  if [ -n "$allowed_origins" ]; then
+    pass "ALLOWED_ORIGINS is configured"
+  else
+    fail "ALLOWED_ORIGINS is empty"
+  fi
+
+  if echo "$allowed_origins" | grep -q '\*'; then
+    fail "ALLOWED_ORIGINS contains wildcard '*'"
+  else
+    pass "ALLOWED_ORIGINS does not use wildcard"
+  fi
+
+  if echo "$allowed_origins" | grep -Eiq 'localhost|127\.0\.0\.1'; then
+    warn "ALLOWED_ORIGINS contains local/dev origins"
+  else
+    pass "ALLOWED_ORIGINS has no local/dev origins"
   fi
 else
   warn "backend/.env not found; runtime env checks skipped"
@@ -64,12 +76,11 @@ BASE_URL="${API_TEST_BASE_URL:-http://127.0.0.1:8000}"
 if curl -fsS "$BASE_URL/health" >/dev/null 2>&1; then
   pass "Backend runtime health check OK ($BASE_URL/health)"
 
-  # Optional: ensure test page is blocked unless explicitly enabled.
-  code="$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/static/auth-test.html" || true)"
-  if [ "$code" = "404" ] || [ "$code" = "200" ]; then
-    pass "Static auth tester route behavior reachable (HTTP $code)"
+  code="$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/static/record.html" || true)"
+  if [ "$code" = "404" ]; then
+    pass "Static routes are removed/disabled (HTTP 404)"
   else
-    warn "Unexpected auth tester HTTP status: $code"
+    fail "Unexpected static route status: $code (expected 404)"
   fi
 else
   warn "Backend not running at $BASE_URL; runtime checks skipped"
